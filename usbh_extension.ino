@@ -185,6 +185,19 @@ uint8_t get_consumer_report_size(uint8_t const* desc_report, uint16_t fragment_s
 }
 
 //--------------------------------------------------------------------+
+// init_consumer_bitmap
+// set all starting values
+//--------------------------------------------------------------------+
+
+void init_tuh_consumer_settings() {
+  for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
+    consumer_map[i].position = -1;
+  }
+  consumer_report_size = 0;
+  tuh_consumer_instance = 0;
+}
+
+//--------------------------------------------------------------------+
 // get_consumer_report_bitmap
 // populate consumer_bitmap[i] with the position of key[i] in field in in HID report data
 //--------------------------------------------------------------------+

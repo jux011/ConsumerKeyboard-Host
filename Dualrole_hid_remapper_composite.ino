@@ -29,7 +29,7 @@
  * - number <-> its symbol (with shift)
  */
 
-#define PRINT_SERIAL_DELAY 500  // milliseconds
+#define PRINT_SERIAL_DELAY 2000  // milliseconds
 
 #include "pin_setup_helper.h"
 
@@ -52,6 +52,20 @@ uint8_t const desc_hid_report[] = {
   TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(RID_CONSUMER_CONTROL))
 };
 
+// list of consumer keys to listen for
+struct bitpos_map consumer_map[6] = {
+  { HID_USAGE_CONSUMER_SCAN_PREVIOUS_TRACK, -1 },
+  { HID_USAGE_CONSUMER_PLAY_PAUSE, -1 },
+  { HID_USAGE_CONSUMER_SCAN_NEXT_TRACK, -1 },
+  { HID_USAGE_CONSUMER_MUTE, -1 },
+  { HID_USAGE_CONSUMER_VOLUME_DECREMENT, -1 },
+  { HID_USAGE_CONSUMER_VOLUME_INCREMENT, -1 },
+};
+static const int CONSUMER_KEYCODES_COUNT = sizeof(consumer_map) / sizeof(bitpos_map);
+
+uint8_t consumer_report_size;
+uint8_t tuh_consumer_instance;
+
 // USB HID object
 Adafruit_USBD_HID usb_hid;
 
@@ -64,7 +78,7 @@ void setup() {
   Serial.begin(115200);
   usb_hid.setPollInterval(2);
   usb_hid.setReportDescriptor(desc_hid_report, sizeof(desc_hid_report));
-  usb_hid.setStringDescriptor("TinyUSB HID Composite");
+  usb_hid.setStringDescriptor("TinyUSB HID Composite\n");
   usb_hid.begin();
 
   if (TinyUSBDevice.mounted()) {
@@ -81,7 +95,7 @@ void setup() {
   }
 #endif
 
-  Serial.println("TinyUSB Host Composite HID Remap Example");
+  Serial.println("TinyUSB Host Composite HID Remap Example\n");
 }
 
 void loop() {
@@ -99,6 +113,8 @@ void setup1() {
 #endif
   // configure pio-usb: defined in usbh_helper.h
   rp2040_configure_pio_usb();
+
+  init_tuh_consumer_settings();
 
   // run host stack on controller (rhport) 1
   // Note: For rp2040 pico-pio-usb, calling USBHost.begin() on core1 will have most of the
@@ -138,13 +154,44 @@ extern "C" {
       return;
     }
 
-    
+    tuh_hid_report_info_t info;
+    uint16_t consumer_page_start, consumer_page_end;
+    bool found = tuh_hid_get_consumer_page(&info, &consumer_page_start, &consumer_page_end, desc_report, desc_len);
+    if (!found) {
+      return;
+    }
+    Serial.printf("HID Consumer Control\r\n");
+    tuh_consumer_instance = instance;
+    consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
+    if (consumer_report_size == 0) {
+      Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
+    } else if (consumer_report_size == 1) {
+      get_consumer_report_bitmap(consumer_map, CONSUMER_KEYCODES_COUNT, desc_report, consumer_page_start, consumer_page_end);
+      // print consumer_map
+      Serial.printf("Consumer key bitmap: \r\n");
+      for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
+        Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", consumer_map[i].keycode, consumer_map[i].position);
+      }
+    } else if (consumer_report_size == 16) {
+      Serial.printf("Consumer key 16bit datafield\r\n");
+    } else {
+      // error
+      Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", consumer_report_size);
+      return;
+    }
 
+    if (!tuh_hid_receive_report(dev_addr, instance)) {
+      Serial.printf("Error: cannot request to receive report\r\n");
+    }
+    return;
   }
 
   // Invoked when device with hid interface is un-mounted
   void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
     Serial.printf("HID device address = %d, instance = %d is unmounted\r\n", dev_addr, instance);
+    if (instance == tuh_consumer_instance) {
+      init_tuh_consumer_settings();
+    }
   }
 
   void remap_key(hid_keyboard_report_t const *original_report, hid_keyboard_report_t *remapped_report) {
@@ -154,25 +201,61 @@ extern "C" {
 
   // Invoked when received report from device via interrupt endpoint
   void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *report, uint16_t len) {
-    if (len != 8) {
-      Serial.printf("report len = %u NOT 8, probably something wrong !!\r\n", len);
-    } else {
-      hid_keyboard_report_t remapped_report;
-      remap_key((hid_keyboard_report_t const *)report, &remapped_report);
+    if (instance == 0) {  // boot keyboard
+      // Serial.printf("Received report from instance %d, len = %u\r\n", instance, len);
+      if (len != 8) {
+        Serial.printf("report len = %u NOT 8, probably something wrong !!\r\n", len);
+      } else {
+        hid_keyboard_report_t remapped_report;
+        remap_key((hid_keyboard_report_t const *)report, &remapped_report);
 
-      // send remapped report to PC
-      // NOTE: for better performance you should save/queue remapped report instead of
-      // blocking wait for usb_hid ready here
-      while (!usb_hid.ready()) {
-        yield();
+        // send remapped report to PC
+        // NOTE: for better performance you should save/queue remapped report instead of
+        // blocking wait for usb_hid ready here
+        while (!usb_hid.ready()) {
+          yield();
+        }
+
+        usb_hid.sendReport(RID_KEYBOARD, &remapped_report, sizeof(hid_keyboard_report_t));
       }
 
-      usb_hid.sendReport(RID_KEYBOARD, &remapped_report, sizeof(hid_keyboard_report_t));
-    }
+      // continue to request to receive report
+      if (!tuh_hid_receive_report(dev_addr, instance)) {
+        Serial.printf("Error: cannot request to receive report\r\n");
+      }
+    } else if (instance == tuh_consumer_instance) {
+      // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
+      // don't remap key
+      if (consumer_report_size == 16) {
+        // 16 bit datafield, just forward the report
+        while (!usb_hid.ready()) {
+          yield();
+        }
+        uint8_t report_to_send[2] = { report[1], report[2] };
+        usb_hid.sendReport(RID_CONSUMER_CONTROL, report_to_send, 2 * sizeof(uint8_t));
+        // continue to request to receive report
+        if (!tuh_hid_receive_report(dev_addr, instance)) {
+          Serial.printf("Error: cannot request to receive report\r\n");
+        }
+      } else if (consumer_report_size == 1) {
+        // // bitmap, translate it to 16bit keycode
+        // uint16_t remapped_report = 0;
 
-    // continue to request to receive report
-    if (!tuh_hid_receive_report(dev_addr, instance)) {
-      Serial.printf("Error: cannot request to receive report\r\n");
+
+
+
+        // while (!usb_hid.ready()) {
+        //   yield();
+        // }
+        // usb_hid.sendReport(RID_CONSUMER_CONTROL, &remapped_report, sizeof(remapped_report));
+        // // continue to request to receive report
+        // if (!tuh_hid_receive_report(dev_addr, instance)) {
+        //   Serial.printf("Error: cannot request to receive report\r\n");
+        // }
+        return;
+      }
+    } else {
+      Serial.printf("Received report from unknown instance %d, len = %u\r\n", instance, len);
     }
   }
 }
