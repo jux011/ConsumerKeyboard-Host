@@ -232,7 +232,7 @@ extern "C" {
           yield();
         }
         uint8_t report_to_send[2] = { report[1], report[2] };
-        usb_hid.sendReport(RID_CONSUMER_CONTROL, report_to_send, 2 * sizeof(uint8_t));
+        usb_hid.sendReport(RID_CONSUMER_CONTROL, report_to_send, sizeof(report_to_send));
         // continue to request to receive report
         if (!tuh_hid_receive_report(dev_addr, instance)) {
           Serial.printf("Error: cannot request to receive report\r\n");
