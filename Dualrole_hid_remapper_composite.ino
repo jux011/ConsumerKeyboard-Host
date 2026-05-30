@@ -41,8 +41,8 @@
 // Report ID
 enum {
   RID_KEYBOARD = 1,
-  RID_MOUSE,
-  RID_CONSUMER_CONTROL,  // Media, volume etc ..
+  RID_MOUSE = 2,
+  RID_CONSUMER_CONTROL = 3,  // Media, volume etc ...
 };
 
 // HID report descriptor using TinyUSB's template
@@ -77,6 +77,15 @@ Adafruit_USBD_HID usb_hid;
 //------------- Core0 -------------//
 void setup() {
   Serial.begin(115200);
+
+#if defined(PRINT_SERIAL_DELAY) && PRINT_SERIAL_DELAY
+  // wait for native usb
+  for (int i = 0; i < PRINT_SERIAL_DELAY; i += 10) {
+    if (Serial) { break; }
+    delay(10);
+  }
+#endif
+
   usb_hid.setPollInterval(2);
   usb_hid.setReportDescriptor(desc_hid_report, sizeof(desc_hid_report));
   usb_hid.setStringDescriptor("TinyUSB HID Composite\n");
@@ -89,7 +98,7 @@ void setup() {
   }
 
 #if defined(PRINT_SERIAL_DELAY) && PRINT_SERIAL_DELAY
-  // wait for native usb
+  // wait for native usb again
   for (int i = 0; i < PRINT_SERIAL_DELAY; i += 10) {
     if (Serial) { break; }
     delay(10);
