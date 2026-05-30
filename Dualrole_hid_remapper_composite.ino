@@ -196,19 +196,25 @@ extern "C" {
     }
   }
 
-  void remap_key(const uint8_t original_id, uint8_t const* original_report, uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report) {
+  void remap_key(const hid_keyboard_report_t* original_report, uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report) {
     // do nothing lmao
-    *remapped_id = original_id;
+    *remapped_id = RID_KEYBOARD;
     memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
+  }
+
+  void remap_consumer_key(const uint16_t original_report, uint8_t* const remapped_id, uint16_t* remapped_report) {
+    // do nothing lmao
+    *remapped_id = RID_CONSUMER_CONTROL;
+    *remapped_report = original_report;
   }
 
   // Invoked when received report from device via interrupt endpoint
   void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
     if (instance == 0) {  // boot keyboard
                           // Serial.printf("Received report from instance %d, len = %u\r\n", instance, len);
-      hid_keyboard_report_t remapped_report;
+      hid_keyboard_report_t report_to_send;
       uint8_t target_id;
-      remap_key(RID_KEYBOARD, report, &target_id, &remapped_report);
+      remap_key((const hid_keyboard_report_t*)report, &target_id, &report_to_send);
 
       // send remapped report to PC
       // NOTE: for better performance you should save/queue remapped report instead of
@@ -217,9 +223,10 @@ extern "C" {
         yield();
       }
 
-      usb_hid.sendReport(RID_KEYBOARD, &remapped_report, sizeof(hid_keyboard_report_t));
+      usb_hid.sendReport(target_id, &report_to_send, sizeof(report_to_send));
     } else if (instance == tuh_consumer_instance) {
       // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
+      uint16_t processed_report = 0;
       uint16_t report_to_send = 0;
       if (tuh_consumer_report_id > 0) {
         // ignore byte 0
@@ -229,14 +236,19 @@ extern "C" {
       // do nothing lmao
       if (consumer_report_size == 16) {
         // 16 bit datafield, just forward the single key
-        memcpy(&report_to_send, report, 2);
+        memcpy(&processed_report, report, 2);
       } else if (consumer_report_size == 1) {
-        report_to_send = convert_bitmap_report_to_keycode(report, len, consumer_map, CONSUMER_KEYCODES_COUNT);
+        processed_report = convert_bitmap_report_to_keycode(report, len, consumer_map, CONSUMER_KEYCODES_COUNT);
       }
+      uint8_t target_id;
+      remap_consumer_key(processed_report, &target_id, &report_to_send);
+      // send remapped report to PC
+      // NOTE: for better performance you should save/queue remapped report instead of
+      // blocking wait for usb_hid ready here
       while (!usb_hid.ready()) {
         yield();
       }
-      usb_hid.sendReport(RID_CONSUMER_CONTROL, &report_to_send, sizeof(report_to_send));
+      usb_hid.sendReport(target_id, &report_to_send, sizeof(report_to_send));
     } else {
       Serial.printf("Received report from unknown instance %d, len = %u\r\n", instance, len);
     }
