@@ -137,7 +137,7 @@ extern "C" {
   // tuh_hid_parse_report_descriptor() can be used to parse common/simple enough
   // descriptor. Note: if report descriptor length > CFG_TUH_ENUMERATION_BUFSIZE,
   // it will be skipped therefore report_desc = NULL, desc_len = 0
-  void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_report, uint16_t desc_len) {
+  void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
     (void)desc_report;
     (void)desc_len;
     uint16_t vid, pid;
@@ -170,10 +170,10 @@ extern "C" {
     } else if (consumer_report_size == 1) {
       get_consumer_report_bitmap(consumer_map, CONSUMER_KEYCODES_COUNT, desc_report, consumer_page_start, consumer_page_end);
       // print consumer_map
-      Serial.printf("Consumer key bitmap: \r\n");
-      for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-        Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", consumer_map[i].keycode, consumer_map[i].position);
-      }
+      // Serial.printf("Consumer key bitmap: \r\n");
+      // for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
+      //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", consumer_map[i].keycode, consumer_map[i].position);
+      // }
     } else if (consumer_report_size == 16) {
       Serial.printf("Consumer key 16bit datafield\r\n");
     } else {
@@ -196,45 +196,42 @@ extern "C" {
     }
   }
 
-  void remap_key(const uint8_t original_id, uint8_t const * original_report, uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report) {
+  void remap_key(const uint8_t original_id, uint8_t const* original_report, uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report) {
     // do nothing lmao
     *remapped_id = original_id;
     memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
   }
 
   // Invoked when received report from device via interrupt endpoint
-  void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *report, uint16_t len) {
+  void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
     if (instance == 0) {  // boot keyboard
-      // Serial.printf("Received report from instance %d, len = %u\r\n", instance, len);
-      if (len != 8) {
-        Serial.printf("report len = %u NOT 8, probably something wrong !!\r\n", len);
-      } else {
-        hid_keyboard_report_t remapped_report;
-        uint8_t target_id;
-        remap_key(RID_KEYBOARD, report, &target_id, &remapped_report);
+                          // Serial.printf("Received report from instance %d, len = %u\r\n", instance, len);
+      hid_keyboard_report_t remapped_report;
+      uint8_t target_id;
+      remap_key(RID_KEYBOARD, report, &target_id, &remapped_report);
 
-        // send remapped report to PC
-        // NOTE: for better performance you should save/queue remapped report instead of
-        // blocking wait for usb_hid ready here
-        while (!usb_hid.ready()) {
-          yield();
-        }
-
-        usb_hid.sendReport(RID_KEYBOARD, &remapped_report, sizeof(hid_keyboard_report_t));
+      // send remapped report to PC
+      // NOTE: for better performance you should save/queue remapped report instead of
+      // blocking wait for usb_hid ready here
+      while (!usb_hid.ready()) {
+        yield();
       }
+
+      usb_hid.sendReport(RID_KEYBOARD, &remapped_report, sizeof(hid_keyboard_report_t));
     } else if (instance == tuh_consumer_instance) {
       // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
       uint16_t report_to_send = 0;
       if (tuh_consumer_report_id > 0) {
         // ignore byte 0
         report++;
+        len--;
       }
       // do nothing lmao
       if (consumer_report_size == 16) {
         // 16 bit datafield, just forward the single key
         memcpy(&report_to_send, report, 2);
       } else if (consumer_report_size == 1) {
-        // TODO
+        report_to_send = convert_bitmap_report_to_keycode(report, len, consumer_map, CONSUMER_KEYCODES_COUNT);
       }
       while (!usb_hid.ready()) {
         yield();

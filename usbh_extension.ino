@@ -266,3 +266,43 @@ void get_consumer_report_bitmap(bitpos_map* consumer_bitmap, const int bitmap_le
     }
   }
 }
+
+//--------------------------------------------------------------------+
+// convert_bitmap_report_to_keycode
+// convert a bitmap report to a 16-bit single keycode indicating which key is pressed/released
+//--------------------------------------------------------------------+
+
+uint16_t convert_bitmap_report_to_keycode(uint8_t const* report, uint16_t report_len, bitpos_map* consumer_bitmap, const int bitmap_len) {
+  // assuming bitmap_len < 32
+  // which is true for this example. adjust type if more keycodes are needed
+  static int stored_report = 0;
+  int last_report = stored_report;
+  int this_report = 0;
+  for (int i = 0; i < bitmap_len; i++) {
+    if (consumer_bitmap[i].position >= report_len * 8) {
+      // error
+      Serial.printf("Error: consumer keycode position %d out of report data bound %u bits\r\n", consumer_bitmap[i].position, report_len * 8);
+      return 0;
+    }
+    if (consumer_bitmap[i].position >= 0) {
+      int byte_pos = consumer_bitmap[i].position / 8;
+      int bit_pos = consumer_bitmap[i].position % 8;
+      if (report[byte_pos] & (1 << bit_pos)) {
+        this_report |= (1 << i);
+      } else {
+        this_report &= ~(1 << i);
+      }
+    }
+  }
+  stored_report = this_report;
+  for (int i = 0; i < bitmap_len; i++) {
+    if ((this_report & (1 << i)) && !(last_report & (1 << i))) {
+      // Serial.printf("Keycode 0x%04x pressed\r\n", consumer_bitmap[i].keycode);
+      return consumer_bitmap[i].keycode;
+    } else if (!(this_report & (1 << i)) && (last_report & (1 << i))) {
+      // Serial.printf("Keycode 0x%04x released\r\n", consumer_bitmap[i].keycode);
+      return 0; // indicate release with 0
+    }
+  }
+  return 0;  // no change
+}
