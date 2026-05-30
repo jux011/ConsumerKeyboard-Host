@@ -196,13 +196,13 @@ extern "C" {
     }
   }
 
-  void remap_key(const hid_keyboard_report_t* original_report, uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report) {
+  void remap_key(uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report, const hid_keyboard_report_t* original_report) {
     // do nothing lmao
     *remapped_id = RID_KEYBOARD;
     memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
   }
 
-  void remap_consumer_key(const uint16_t original_report, uint8_t* const remapped_id, uint16_t* remapped_report) {
+  void remap_consumer_key(uint8_t* const remapped_id, uint16_t* remapped_report, const uint16_t original_report) {
     // do nothing lmao
     *remapped_id = RID_CONSUMER_CONTROL;
     *remapped_report = original_report;
@@ -214,7 +214,7 @@ extern "C" {
                           // Serial.printf("Received report from instance %d, len = %u\r\n", instance, len);
       hid_keyboard_report_t report_to_send;
       uint8_t target_id;
-      remap_key((const hid_keyboard_report_t*)report, &target_id, &report_to_send);
+      remap_key(&target_id, &report_to_send, (const hid_keyboard_report_t*)report);
 
       // send remapped report to PC
       // NOTE: for better performance you should save/queue remapped report instead of
