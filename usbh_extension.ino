@@ -268,6 +268,40 @@ void get_consumer_report_bitmap(bitpos_map* consumer_bitmap, const int bitmap_le
 }
 
 //--------------------------------------------------------------------+
+//
+//
+//--------------------------------------------------------------------+
+
+uint16_t process_consumer_report(uint8_t const* report, uint16_t report_len, uint8_t consumer_report_size, uint16_t tuh_consumer_report_id) {
+  if (tuh_consumer_report_id > 0) {
+    // report with report id: first byte is report id, adjust data pointer and length
+    if (report_len < 1) {
+      Serial.printf("Error: received report with invalid report_length %u\r\n", report_len);
+      return 0;
+    }
+    else if (report[0] != tuh_consumer_report_id) {
+      Serial.printf("Error: received report with report_id %u, expected %u\r\n", report[0], tuh_consumer_report_id);
+      // continue anyways
+    }
+    report++;
+    report_len--;
+  }
+  if (consumer_report_size == 1) {
+    return convert_bitmap_report_to_keycode(report, report_len, consumer_map, CONSUMER_KEYCODES_COUNT);
+  // } else if (consumer_report_size == 16) {
+  } else {
+    uint16_t data = 0;
+    memcpy(&data, report, sizeof(uint16_t));
+    return data;
+  // } else {
+  //   // error
+  //   Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", consumer_report_size);
+  //   return 0;
+  }
+}
+
+
+//--------------------------------------------------------------------+
 // convert_bitmap_report_to_keycode
 // convert a bitmap report to a 16-bit single keycode indicating which key is pressed/released
 //--------------------------------------------------------------------+

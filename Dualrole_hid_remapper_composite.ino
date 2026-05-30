@@ -226,22 +226,11 @@ extern "C" {
       usb_hid.sendReport(target_id, &report_to_send, sizeof(report_to_send));
     } else if (instance == tuh_consumer_instance) {
       // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
-      uint16_t processed_report = 0;
+      uint16_t report_consumer_key = process_consumer_report(report, len, consumer_report_size, tuh_consumer_report_id);
       uint16_t report_to_send = 0;
-      if (tuh_consumer_report_id > 0) {
-        // ignore byte 0
-        report++;
-        len--;
-      }
-      // do nothing lmao
-      if (consumer_report_size == 16) {
-        // 16 bit datafield, just forward the single key
-        memcpy(&processed_report, report, 2);
-      } else if (consumer_report_size == 1) {
-        processed_report = convert_bitmap_report_to_keycode(report, len, consumer_map, CONSUMER_KEYCODES_COUNT);
-      }
       uint8_t target_id;
-      remap_consumer_key(processed_report, &target_id, &report_to_send);
+      remap_consumer_key(&target_id, &report_to_send, report_consumer_key);
+
       // send remapped report to PC
       // NOTE: for better performance you should save/queue remapped report instead of
       // blocking wait for usb_hid ready here
