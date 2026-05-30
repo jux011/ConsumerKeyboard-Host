@@ -189,12 +189,17 @@ uint8_t get_consumer_report_size(uint8_t const* desc_report, uint16_t fragment_s
 // set all starting values
 //--------------------------------------------------------------------+
 
+// uint8_t consumer_report_size = 0;
+// uint8_t tuh_consumer_instance = 0;
+// uint8_t tuh_consumer_report_id = 0;
+
 void init_tuh_consumer_settings() {
   for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
     consumer_map[i].position = -1;
   }
   consumer_report_size = 0;
   tuh_consumer_instance = 0;
+  tuh_consumer_report_id = 0;
 }
 
 //--------------------------------------------------------------------+

@@ -65,6 +65,7 @@ static const int CONSUMER_KEYCODES_COUNT = sizeof(consumer_map) / sizeof(bitpos_
 
 uint8_t consumer_report_size;
 uint8_t tuh_consumer_instance;
+uint8_t tuh_consumer_report_id;
 
 // USB HID object
 Adafruit_USBD_HID usb_hid;
@@ -162,6 +163,7 @@ extern "C" {
     }
     Serial.printf("HID Consumer Control\r\n");
     tuh_consumer_instance = instance;
+    tuh_consumer_report_id = info.report_id;
     consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
     if (consumer_report_size == 0) {
       Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
@@ -194,9 +196,10 @@ extern "C" {
     }
   }
 
-  void remap_key(hid_keyboard_report_t const *original_report, hid_keyboard_report_t *remapped_report) {
-    memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
+  void remap_key(const uint8_t original_id, uint8_t const * original_report, uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report) {
     // do nothing lmao
+    *remapped_id = original_id;
+    memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
   }
 
   // Invoked when received report from device via interrupt endpoint
@@ -207,7 +210,8 @@ extern "C" {
         Serial.printf("report len = %u NOT 8, probably something wrong !!\r\n", len);
       } else {
         hid_keyboard_report_t remapped_report;
-        remap_key((hid_keyboard_report_t const *)report, &remapped_report);
+        uint8_t target_id;
+        remap_key(RID_KEYBOARD, report, &target_id, &remapped_report);
 
         // send remapped report to PC
         // NOTE: for better performance you should save/queue remapped report instead of
@@ -218,44 +222,31 @@ extern "C" {
 
         usb_hid.sendReport(RID_KEYBOARD, &remapped_report, sizeof(hid_keyboard_report_t));
       }
-
-      // continue to request to receive report
-      if (!tuh_hid_receive_report(dev_addr, instance)) {
-        Serial.printf("Error: cannot request to receive report\r\n");
-      }
     } else if (instance == tuh_consumer_instance) {
       // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
-      // don't remap key
-      if (consumer_report_size == 16) {
-        // 16 bit datafield, just forward the report
-        while (!usb_hid.ready()) {
-          yield();
-        }
-        uint8_t report_to_send[2] = { report[1], report[2] };
-        usb_hid.sendReport(RID_CONSUMER_CONTROL, report_to_send, sizeof(report_to_send));
-        // continue to request to receive report
-        if (!tuh_hid_receive_report(dev_addr, instance)) {
-          Serial.printf("Error: cannot request to receive report\r\n");
-        }
-      } else if (consumer_report_size == 1) {
-        // // bitmap, translate it to 16bit keycode
-        // uint16_t remapped_report = 0;
-
-
-
-
-        // while (!usb_hid.ready()) {
-        //   yield();
-        // }
-        // usb_hid.sendReport(RID_CONSUMER_CONTROL, &remapped_report, sizeof(remapped_report));
-        // // continue to request to receive report
-        // if (!tuh_hid_receive_report(dev_addr, instance)) {
-        //   Serial.printf("Error: cannot request to receive report\r\n");
-        // }
-        return;
+      uint16_t report_to_send = 0;
+      if (tuh_consumer_report_id > 0) {
+        // ignore byte 0
+        report++;
       }
+      // do nothing lmao
+      if (consumer_report_size == 16) {
+        // 16 bit datafield, just forward the single key
+        memcpy(&report_to_send, report, 2);
+      } else if (consumer_report_size == 1) {
+        // TODO
+      }
+      while (!usb_hid.ready()) {
+        yield();
+      }
+      usb_hid.sendReport(RID_CONSUMER_CONTROL, &report_to_send, sizeof(report_to_send));
     } else {
       Serial.printf("Received report from unknown instance %d, len = %u\r\n", instance, len);
+    }
+
+    // continue to request to receive report
+    if (!tuh_hid_receive_report(dev_addr, instance)) {
+      Serial.printf("Error: cannot request to receive report\r\n");
     }
   }
 }
