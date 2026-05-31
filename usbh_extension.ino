@@ -39,15 +39,14 @@ void tuh_init_consumer_settings(uint16_t target_keys_list[], const int target_ke
   if (target_consumer_keys != nullptr) {
     Serial.printf("Warning: target_consumer_keys already initialized, re-initializing with new target keys\r\n");
     delete[] target_consumer_keys;
+    delete[] key_bitmap_positions;
     // target_consumer_keys = nullptr;
+    // key_bitmap_positions = nullptr;
   }
   CONSUMER_KEYCODES_COUNT = target_keys_count;
   target_consumer_keys = new uint16_t[target_keys_count];
   key_bitmap_positions = new int[target_keys_count];
-  for (int i = 0; i < target_keys_count; i++) {
-    target_consumer_keys[i] = target_keys_list[i];
-    key_bitmap_positions[i] = -1;
-  }
+  memcpy(target_consumer_keys, target_keys_list, target_keys_count * sizeof(uint16_t));
   tuh_init_consumer_settings();
 }
 
@@ -57,7 +56,7 @@ void tuh_init_consumer_settings(uint16_t target_keys_list[], const int target_ke
 // Arduino\libraries\Adafruit_TinyUSB_Library\src\class\hid\hid_host.c
 //--------------------------------------------------------------------+
 
-bool tuh_hid_get_consumer_page(tuh_hid_report_info_t* const info, uint16_t* const consumer_page_start, uint16_t* const consumer_page_end, uint8_t const* desc_report, uint16_t desc_len) {
+bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const consumer_page_start, uint16_t* const consumer_page_end, uint8_t const desc_report[], uint16_t desc_len) {
   // Report Item 6.2.2.2 USB HID 1.11
   union TU_ATTR_PACKED {
     uint8_t byte;
@@ -196,7 +195,7 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t* const info, uint16_t* cons
 // Number of bits per field in HID report data
 //--------------------------------------------------------------------+
 
-uint8_t get_consumer_report_size(uint8_t const* desc_report, uint16_t fragment_start, uint16_t fragment_end) {
+uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end) {
   // // Report Item 6.2.2.2 USB HID 1.11
   // union TU_ATTR_PACKED {
   //   uint8_t byte;
@@ -241,7 +240,7 @@ uint8_t get_consumer_report_size(uint8_t const* desc_report, uint16_t fragment_s
 // populate computed_bitmap[i] with the position of key[i] in field in in HID report data
 //--------------------------------------------------------------------+
 
-void compute_consumer_report_bitmap(int* computed_bitmap, const uint16_t* const target_keys, const int bitmap_len, uint8_t const* desc_report, uint16_t fragment_start, uint16_t fragment_end) {
+void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target_keys[], const int bitmap_len, uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end) {
   // // Report Item 6.2.2.2 USB HID 1.11
   // union TU_ATTR_PACKED {
   //   uint8_t byte;
@@ -306,7 +305,7 @@ void compute_consumer_report_bitmap(int* computed_bitmap, const uint16_t* const 
 // parse desc_report and initialize all settings related to consumer page
 //--------------------------------------------------------------------+
 
-bool tuh_compute_consumer_page_values(const uint8_t* desc_report, uint16_t consumer_page_start, uint16_t consumer_page_end,
+bool tuh_compute_consumer_page_values(uint8_t const desc_report[], uint16_t consumer_page_start, uint16_t consumer_page_end,
                                       uint8_t instance, uint8_t report_id) {
   tuh_consumer_instance = instance;
   tuh_consumer_report_id = report_id;
@@ -338,7 +337,7 @@ bool tuh_compute_consumer_page_values(const uint8_t* desc_report, uint16_t consu
 // process a consumer report and return the corresponding keycode
 //--------------------------------------------------------------------+
 
-uint16_t process_consumer_report(uint8_t const* report, uint16_t report_len) {
+uint16_t process_consumer_report(uint8_t const report[], uint16_t report_len) {
   if (tuh_consumer_report_id > 0) {
     // report with report id: first byte is report id, adjust data pointer and length
     if (report_len < 1) {
@@ -370,7 +369,7 @@ uint16_t process_consumer_report(uint8_t const* report, uint16_t report_len) {
 // convert a bitmap report to a 16-bit single keycode indicating which key is pressed/released
 //--------------------------------------------------------------------+
 
-uint16_t convert_bitmap_report_to_keycode(uint8_t const* report, uint16_t report_len) {
+uint16_t convert_bitmap_report_to_keycode(uint8_t const report[], uint16_t report_len) {
   // assuming CONSUMER_KEYCODES_COUNT < 32
   // which is true for this example. adjust type if more keycodes are needed
   static int stored_report = 0;
