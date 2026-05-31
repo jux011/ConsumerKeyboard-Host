@@ -4,7 +4,8 @@
 //--------------------------------------------------------------------+
 
 // list of consumer keys to listen for
-static bitpos_map* consumer_map = nullptr;
+static uint16_t* target_consumer_keys = nullptr;
+static int* key_bitmap_positions = nullptr;
 static int CONSUMER_KEYCODES_COUNT;
 
 static uint8_t tuh_consumer_report_size;
@@ -17,8 +18,12 @@ static uint8_t tuh_consumer_report_id;
 //--------------------------------------------------------------------+
 
 void tuh_init_consumer_settings() {
-  for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-    consumer_map[i].position = -1;
+  if (key_bitmap_positions == nullptr) {
+    Serial.printf("Error: key_bitmap_positions not initialized\r\n");
+  } else {
+    for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
+      key_bitmap_positions[i] = -1;
+    }
   }
   tuh_consumer_report_size = 0;
   tuh_consumer_instance = 0;
@@ -31,16 +36,17 @@ void tuh_init_consumer_settings() {
 //--------------------------------------------------------------------+
 
 void tuh_init_consumer_settings(uint16_t target_keys_list[], const int target_keys_count) {
-  if (consumer_map != nullptr) {
-      Serial.printf("Warning: consumer_map already initialized, re-initializing with new target keys\r\n");
-      delete[] consumer_map;
-      // consumer_map = nullptr;
-    }
+  if (target_consumer_keys != nullptr) {
+    Serial.printf("Warning: target_consumer_keys already initialized, re-initializing with new target keys\r\n");
+    delete[] target_consumer_keys;
+    // target_consumer_keys = nullptr;
+  }
   CONSUMER_KEYCODES_COUNT = target_keys_count;
-  consumer_map = new bitpos_map[target_keys_count];
+  target_consumer_keys = new uint16_t[target_keys_count];
+  key_bitmap_positions = new int[target_keys_count];
   for (int i = 0; i < target_keys_count; i++) {
-    consumer_map[i].keycode = target_keys_list[i];
-    consumer_map[i].position = -1;
+    target_consumer_keys[i] = target_keys_list[i];
+    key_bitmap_positions[i] = -1;
   }
   tuh_init_consumer_settings();
 }
@@ -232,10 +238,10 @@ uint8_t get_consumer_report_size(uint8_t const* desc_report, uint16_t fragment_s
 
 //--------------------------------------------------------------------+
 // compute_consumer_report_bitmap
-// populate consumer_bitmap[i] with the position of key[i] in field in in HID report data
+// populate computed_bitmap[i] with the position of key[i] in field in in HID report data
 //--------------------------------------------------------------------+
 
-void compute_consumer_report_bitmap(bitpos_map* consumer_bitmap, const int bitmap_len, uint8_t const* desc_report, uint16_t fragment_start, uint16_t fragment_end) {
+void compute_consumer_report_bitmap(int* computed_bitmap, const uint16_t* const target_keys, const int bitmap_len, uint8_t const* desc_report, uint16_t fragment_start, uint16_t fragment_end) {
   // // Report Item 6.2.2.2 USB HID 1.11
   // union TU_ATTR_PACKED {
   //   uint8_t byte;
@@ -265,30 +271,30 @@ void compute_consumer_report_bitmap(bitpos_map* consumer_bitmap, const int bitma
     if (desc_report[i] == target1_byte) {  // size = 1, data 00-FF
       usages_seen++;
       for (int j = 0; j < bitmap_len; j++) {
-        if (consumer_bitmap[j].keycode == desc_report[i + 1]) {
-          consumer_bitmap[j].position = usages_seen;
+        if (target_keys[j] == desc_report[i + 1]) {
+          computed_bitmap[j] = usages_seen;
           break;
         }
       }
     } else if (desc_report[i] == target2_byte) {  // size = 2, data > FF
       usages_seen++;
-      // 2 byte example: 0x0A, 0x96, 0x01 -> data = 0x0196 (little endian)
+      // example: 0x0A, 0x96, 0x01 -> data = 0x0196 (little endian)
       uint16_t data = 0;
       memcpy(&data, desc_report + i + 1, 2);
       for (int j = 0; j < bitmap_len; j++) {
-        if (consumer_bitmap[j].keycode == data) {
-          consumer_bitmap[j].position = usages_seen;
+        if (target_keys[j] == data) {
+          computed_bitmap[j] = usages_seen;
           break;
         }
       }
     }
 
     switch (desc_report[i] & 0b11) {
-      case 3: i += 5; break;  // HID 1.11 6.2.2.2 3 is 4 bytes
+      case 3: i += 5; break;  // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
       case 2: i += 3; break;
       case 1: i += 2; break;
       case 0: i += 1; break;
-      default:  //wtf
+      default:  // wtf
         i = fragment_end;
         break;
     }
@@ -311,17 +317,17 @@ bool tuh_compute_consumer_page_values(const uint8_t* desc_report, uint16_t consu
     return false;
   } else if (tuh_consumer_report_size == 1) {
     Serial.printf("Consumer key 1bit bitmap\r\n");
-    compute_consumer_report_bitmap(consumer_map, CONSUMER_KEYCODES_COUNT, desc_report, consumer_page_start, consumer_page_end);
-    // print consumer_map
+    compute_consumer_report_bitmap(key_bitmap_positions, target_consumer_keys, CONSUMER_KEYCODES_COUNT, desc_report, consumer_page_start, consumer_page_end);
+    // // print consumer_map
     // Serial.printf("Consumer key bitmap: \r\n");
     // for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-    //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", consumer_map[i].keycode, consumer_map[i].position);
+    //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", target_consumer_keys[i], key_bitmap_positions[i]);
     // }
   } else if (tuh_consumer_report_size == 16) {
     Serial.printf("Consumer key 16bit datafield\r\n");
   } else {
     // error
-    Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n",tuh_consumer_report_size);
+    Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", tuh_consumer_report_size);
     return false;
   }
   return true;
@@ -345,7 +351,7 @@ uint16_t process_consumer_report(uint8_t const* report, uint16_t report_len) {
     report++;
     report_len--;
   }
-  if (tuh_consumer_report_size == 1) {  
+  if (tuh_consumer_report_size == 1) {
     return convert_bitmap_report_to_keycode(report, report_len);
     // } else if (tuh_consumer_report_size == 16) {
   } else {
@@ -359,7 +365,6 @@ uint16_t process_consumer_report(uint8_t const* report, uint16_t report_len) {
   }
 }
 
-
 //--------------------------------------------------------------------+
 // convert_bitmap_report_to_keycode
 // convert a bitmap report to a 16-bit single keycode indicating which key is pressed/released
@@ -372,14 +377,14 @@ uint16_t convert_bitmap_report_to_keycode(uint8_t const* report, uint16_t report
   int last_report = stored_report;
   int this_report = 0;
   for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-    if (consumer_map[i].position >= report_len * 8) {
+    if (key_bitmap_positions[i] >= report_len * 8) {
       // error
-      Serial.printf("Error: consumer keycode position %d out of report data bound %u bits\r\n", consumer_map[i].position, report_len * 8);
+      Serial.printf("Error: consumer keycode position %d out of report data bound %u bits\r\n", key_bitmap_positions[i], report_len * 8);
       return 0;
     }
-    if (consumer_map[i].position >= 0) {
-      int byte_pos = consumer_map[i].position / 8;
-      int bit_pos = consumer_map[i].position % 8;
+    if (key_bitmap_positions[i] >= 0) {
+      int byte_pos = key_bitmap_positions[i] / 8;
+      int bit_pos = key_bitmap_positions[i] % 8;
       if (report[byte_pos] & (1 << bit_pos)) {
         this_report |= (1 << i);
       } else {
@@ -391,7 +396,7 @@ uint16_t convert_bitmap_report_to_keycode(uint8_t const* report, uint16_t report
   for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
     if ((this_report & (1 << i)) && !(last_report & (1 << i))) {
       // Serial.printf("Keycode 0x%04x pressed\r\n", consumer_bitmap[i].keycode);
-      return consumer_map[i].keycode;
+      return target_consumer_keys[i];  // indicate press with keycode
     } else if (!(this_report & (1 << i)) && (last_report & (1 << i))) {
       // Serial.printf("Keycode 0x%04x released\r\n", consumer_bitmap[i].keycode);
       return 0;  // indicate release with 0

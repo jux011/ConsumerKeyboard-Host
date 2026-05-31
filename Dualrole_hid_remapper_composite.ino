@@ -36,7 +36,7 @@
 // USBHost is defined in usbh_helper.h
 #include "usbh_helper.h"
 
-#include "usbh_extension.h"
+// #include "usbh_extension.ino"  // inclusion is automatic
 
 // Report ID
 enum {
