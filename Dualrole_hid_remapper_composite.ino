@@ -52,20 +52,14 @@ uint8_t const desc_hid_report[] = {
   TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(RID_CONSUMER_CONTROL))
 };
 
-// list of consumer keys to listen for
-struct bitpos_map consumer_map[6] = {
-  { HID_USAGE_CONSUMER_SCAN_PREVIOUS_TRACK, -1 },
-  { HID_USAGE_CONSUMER_PLAY_PAUSE, -1 },
-  { HID_USAGE_CONSUMER_SCAN_NEXT_TRACK, -1 },
-  { HID_USAGE_CONSUMER_MUTE, -1 },
-  { HID_USAGE_CONSUMER_VOLUME_DECREMENT, -1 },
-  { HID_USAGE_CONSUMER_VOLUME_INCREMENT, -1 },
+static uint16_t consumer_keys_list[6] = {
+  HID_USAGE_CONSUMER_SCAN_PREVIOUS_TRACK,
+  HID_USAGE_CONSUMER_PLAY_PAUSE,
+  HID_USAGE_CONSUMER_SCAN_NEXT_TRACK,
+  HID_USAGE_CONSUMER_MUTE,
+  HID_USAGE_CONSUMER_VOLUME_DECREMENT,
+  HID_USAGE_CONSUMER_VOLUME_INCREMENT,
 };
-static const int CONSUMER_KEYCODES_COUNT = sizeof(consumer_map) / sizeof(bitpos_map);
-
-uint8_t consumer_report_size;
-uint8_t tuh_consumer_instance;
-uint8_t tuh_consumer_report_id;
 
 // USB HID object
 Adafruit_USBD_HID usb_hid;
@@ -86,7 +80,7 @@ void setup() {
   }
 #endif
 
-  usb_hid.setPollInterval(2); // milliseconds
+  usb_hid.setPollInterval(2);  // milliseconds
   usb_hid.setReportDescriptor(desc_hid_report, sizeof(desc_hid_report));
   usb_hid.setStringDescriptor("TinyUSB HID Composite\n");
   usb_hid.begin();
@@ -124,7 +118,7 @@ void setup1() {
   // configure pio-usb: defined in usbh_helper.h
   rp2040_configure_pio_usb();
 
-  init_tuh_consumer_settings();
+  tuh_init_consumer_settings(consumer_keys_list, 6);
 
   // run host stack on controller (rhport) 1
   // Note: For rp2040 pico-pio-usb, calling USBHost.begin() on core1 will have most of the
@@ -166,28 +160,20 @@ extern "C" {
 
     tuh_hid_report_info_t info;
     uint16_t consumer_page_start, consumer_page_end;
-    bool found = tuh_hid_get_consumer_page(&info, &consumer_page_start, &consumer_page_end, desc_report, desc_len);
+    bool found = tuh_hid_get_consumer_page(
+      &info, &consumer_page_start, &consumer_page_end,
+      desc_report, desc_len);
     if (!found) {
+      // Serial.printf("this instance is not a keyboard protocol");
       return;
     }
+
     Serial.printf("HID Consumer Control\r\n");
-    tuh_consumer_instance = instance;
-    tuh_consumer_report_id = info.report_id;
-    consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
-    if (consumer_report_size == 0) {
-      Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
-    } else if (consumer_report_size == 1) {
-      get_consumer_report_bitmap(consumer_map, CONSUMER_KEYCODES_COUNT, desc_report, consumer_page_start, consumer_page_end);
-      // print consumer_map
-      // Serial.printf("Consumer key bitmap: \r\n");
-      // for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-      //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", consumer_map[i].keycode, consumer_map[i].position);
-      // }
-    } else if (consumer_report_size == 16) {
-      Serial.printf("Consumer key 16bit datafield\r\n");
-    } else {
-      // error
-      Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", consumer_report_size);
+    bool success = tuh_compute_consumer_page_values(
+      desc_report, consumer_page_start, consumer_page_end,
+      instance, info.report_id);
+    if (!success) {
+      Serial.printf("Error: cannot compute report_size, instance, report_id, \r\n");
       return;
     }
 
@@ -200,8 +186,8 @@ extern "C" {
   // Invoked when device with hid interface is un-mounted
   void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
     Serial.printf("HID device address = %d, instance = %d is unmounted\r\n", dev_addr, instance);
-    if (instance == tuh_consumer_instance) {
-      init_tuh_consumer_settings();
+    if (instance == get_tuh_consumer_instance()) {
+      tuh_init_consumer_settings();
     }
   }
 
@@ -233,9 +219,9 @@ extern "C" {
       }
 
       usb_hid.sendReport(target_id, &report_to_send, sizeof(report_to_send));
-    } else if (instance == tuh_consumer_instance) {
+    } else if (instance == get_tuh_consumer_instance()) {
       // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
-      uint16_t report_consumer_key = process_consumer_report(report, len, consumer_report_size, tuh_consumer_report_id);
+      uint16_t report_consumer_key = process_consumer_report(report, len);
       uint16_t report_to_send = 0;
       uint8_t target_id;
       remap_consumer_key(&target_id, &report_to_send, report_consumer_key);
