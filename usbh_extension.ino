@@ -268,8 +268,8 @@ void get_consumer_report_bitmap(bitpos_map* consumer_bitmap, const int bitmap_le
 }
 
 //--------------------------------------------------------------------+
-//
-//
+// process_consumer_report
+// process a consumer report and return the corresponding keycode
 //--------------------------------------------------------------------+
 
 uint16_t process_consumer_report(uint8_t const* report, uint16_t report_len, uint8_t consumer_report_size, uint16_t tuh_consumer_report_id) {
