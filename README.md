@@ -1,7 +1,10 @@
 ###### Hardware used:
 
-rp2040 pi pico
-2 GPIO pins
+[waveshare RP2040-PiZero](https://www.waveshare.com/wiki/RP2040-PiZero)
+
+onboard USB in
+
+GPIO pin 6 pin 7 connected to USB out
 
 ###### Software used:
 
