@@ -29,8 +29,6 @@ Skyloong GK104
 
 Keychron K10PRO
 
+###### Test setup:
 
-
-
-
-
+![](./pics/IMG_20260601_150054728.jpg)
