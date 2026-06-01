@@ -52,6 +52,8 @@ uint8_t const desc_hid_report[] = {
   TUD_HID_REPORT_DESC_CONSUMER(HID_REPORT_ID(RID_CONSUMER_CONTROL))
 };
 
+// valid values can be found in enum{} on line 897
+// of Adafruit_TinyUSB_Library\src\class\hid\usages.h
 static uint16_t consumer_keys_list[6] = {
   HID_USAGE_CONSUMER_SCAN_PREVIOUS_TRACK,
   HID_USAGE_CONSUMER_PLAY_PAUSE,
@@ -221,7 +223,7 @@ extern "C" {
       usb_hid.sendReport(target_id, &report_to_send, sizeof(report_to_send));
     } else if (instance == get_tuh_consumer_instance()) {
       // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
-      uint16_t report_consumer_key = process_consumer_report(report, len);
+      uint16_t report_consumer_key = tuh_process_consumer_report(report, len);
       uint16_t report_to_send = 0;
       uint8_t target_id;
       remap_consumer_key(&target_id, &report_to_send, report_consumer_key);

@@ -36,7 +36,7 @@ static void rp2040_configure_pio_usb(void) {
   uint32_t cpu_hz = clock_get_hz(clk_sys);
   if (cpu_hz % 12000000UL) {
     while (!Serial) {
-      delay(10);   // wait for native usb
+      delay(10);  // wait for native usb
     }
     Serial.printf("Error: CPU Clock = %lu, PIO USB require CPU clock must be multiple of 12 Mhz\r\n", cpu_hz);
     Serial.printf("Change your CPU Clock to 12*n Mhz in Menu->CPU Speed \r\n");

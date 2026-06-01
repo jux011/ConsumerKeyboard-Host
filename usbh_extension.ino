@@ -5,7 +5,10 @@
 
 // list of consumer keys to listen for
 static uint16_t* target_consumer_keys = nullptr;
+// bitmap of positions of consumer keys in report data of attached keyboard
+// index starting from 0, -1 if key not found in report
 static int* key_bitmap_positions = nullptr;
+// len(target_consumer_keys)
 static int CONSUMER_KEYCODES_COUNT;
 
 static uint8_t tuh_consumer_report_size;
@@ -13,8 +16,12 @@ static uint8_t tuh_consumer_instance;
 static uint8_t tuh_consumer_report_id;
 
 //--------------------------------------------------------------------+
-// init_consumer_bitmap
-// set all starting values
+// public facing
+// tuh_init_consumer_settings
+// sets all starting values
+// global variables updated:
+//   key_bitmap_positions,
+//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
 //--------------------------------------------------------------------+
 
 void tuh_init_consumer_settings() {
@@ -31,8 +38,15 @@ void tuh_init_consumer_settings() {
 }
 
 //--------------------------------------------------------------------+
-// init_consumer_bitmap
-// set all starting values
+// public facing
+// tuh_init_consumer_settings
+// sets all starting values and sets target_consumer_keys list
+// vars:
+//   target_keys_list: list of consumer keycodes to listen for
+//   target_keys_count: length of target_keys_list
+// global variables updated:
+//   target_consumer_keys, key_bitmap_positions, CONSUMER_KEYCODES_COUNT,
+//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
 //--------------------------------------------------------------------+
 
 void tuh_init_consumer_settings(uint16_t target_keys_list[], const int target_keys_count) {
@@ -51,9 +65,19 @@ void tuh_init_consumer_settings(uint16_t target_keys_list[], const int target_ke
 }
 
 //--------------------------------------------------------------------+
+// public facing
 // tuh_hid_get_consumer_page
 // adapted from tuh_hid_parse_report_descriptor()
 // Arduino\libraries\Adafruit_TinyUSB_Library\src\class\hid\hid_host.c
+// parses the report descriptor to find the consumer page and gets its report id and size
+// vars:
+//   info: output, report info struct pointer to fill in
+//   consumer_page_start: output, pointer to uint16_t to fill in the starting index of consumer page in desc_report
+//   consumer_page_end: output, pointer to uint16_t to fill in the ending index of consumer page in desc_report
+//   desc_report: input, the report descriptor to parse
+//   desc_len: input, length of desc_report
+// return:
+//   true if consumer page found and output values are set, false if consumer page not found and output values are cleared
 //--------------------------------------------------------------------+
 
 bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const consumer_page_start, uint16_t* const consumer_page_end, uint8_t const desc_report[], uint16_t desc_len) {
@@ -87,7 +111,7 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const con
     uint8_t const type = header.type;
     uint8_t size = header.size;
     if (size == 3) {
-      size = 4;  // HID 1.11 6.2.2.2 3 is 4 bytes
+      size = 4;  // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
     }
 
     uint8_t const data8 = (size > 0) ? desc_report[0] : 0;
@@ -192,7 +216,7 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const con
 
 //--------------------------------------------------------------------+
 // get_consumer_report_size
-// Number of bits per field in HID report data
+// returns number of bits per key in HID report datafield
 //--------------------------------------------------------------------+
 
 uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end) {
@@ -207,7 +231,7 @@ uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_
   // } header;
 
   // // breaks if consumer_report_size > 255
-  // // this will not occur for HID. probably.
+  // // this will not occur for any modern keyboard. probably.
   // header.size = 1;
   // header.type = RI_TYPE_GLOBAL;
   // header.tag = RI_GLOBAL_REPORT_SIZE;
@@ -237,7 +261,14 @@ uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_
 
 //--------------------------------------------------------------------+
 // compute_consumer_report_bitmap
-// populate computed_bitmap[i] with the position of key[i] in field in in HID report data
+// populates computed_bitmap[i] with the position of key[i] in field in in HID report data
+// vars:
+//   computed_bitmap: output, bitmap of positions of consumer keys in report data of attached keyboard, index starting from 0, -1 if key not found in report
+//   target_keys: input, list of consumer keycodes to listen for
+//   bitmap_len: input, length of computed_bitmap and target_keys
+//   desc_report: input, the report descriptor to parse
+//   fragment_start: input, the starting index of consumer page in desc_report
+//   fragment_end: input, the ending index of consumer page in desc_report
 //--------------------------------------------------------------------+
 
 void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target_keys[], const int bitmap_len, uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end) {
@@ -254,11 +285,11 @@ void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target
   // header.size = 1;
   // header.type = RI_TYPE_LOCAL;
   // header.tag = RI_LOCAL_USAGE;
-  const uint8_t target1_byte = 0x09;
   // const uint8_t target1_byte = header.byte;
+  const uint8_t target1_byte = 0x09;
   // header.size = 2;
-  const uint8_t target2_byte = 0x0A;
   // const uint8_t target2_byte = header.byte;
+  const uint8_t target2_byte = 0x0A;
 
   int i = fragment_start;
 
@@ -301,8 +332,20 @@ void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target
 }
 
 //--------------------------------------------------------------------+
-// tuh_init_consumer_page
-// parse desc_report and initialize all settings related to consumer page
+// public facing
+// tuh_compute_consumer_page_values
+// parses desc_report and initializes all settings related to consumer page
+//   vars:
+//   desc_report: input, the report descriptor to parse
+//   consumer_page_start: input, the starting index of consumer page in desc_report
+//   consumer_page_end: input, the ending index of consumer page in desc_report
+//   instance: input, the instance number of the consumer control interface
+//   report_id: input, the report id of the consumer control report
+// return:
+//   true if consumer page found and output values are set, false if consumer page not found in this instance
+// global variables set:
+//   key_bitmap_positions,
+//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
 //--------------------------------------------------------------------+
 
 bool tuh_compute_consumer_page_values(uint8_t const desc_report[], uint16_t consumer_page_start, uint16_t consumer_page_end,
@@ -333,11 +376,17 @@ bool tuh_compute_consumer_page_values(uint8_t const desc_report[], uint16_t cons
 }
 
 //--------------------------------------------------------------------+
-// process_consumer_report
-// process a consumer report and return the corresponding keycode
+// public facing
+// tuh_process_consumer_report
+// processes a consumer report and return the corresponding uint16_t keycode
+// vars:
+//   report: input, the consumer report received from attached keyboard
+//   report_len: input, length of report
+// return:
+//   the keycode corresponding to the report
 //--------------------------------------------------------------------+
 
-uint16_t process_consumer_report(uint8_t const report[], uint16_t report_len) {
+uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len) {
   if (tuh_consumer_report_id > 0) {
     // report with report id: first byte is report id, adjust data pointer and length
     if (report_len < 1) {
@@ -366,25 +415,25 @@ uint16_t process_consumer_report(uint8_t const report[], uint16_t report_len) {
 
 //--------------------------------------------------------------------+
 // convert_bitmap_report_to_keycode
-// convert a bitmap report to a 16-bit single keycode indicating which key is pressed/released
+// converts a bitmap report to a 16-bit single keycode indicating which key is pressed/released
 //--------------------------------------------------------------------+
 
-uint16_t convert_bitmap_report_to_keycode(uint8_t const report[], uint16_t report_len) {
+uint16_t convert_bitmap_report_to_keycode(uint8_t const datafield[], uint16_t datafield_len) {
   // assuming CONSUMER_KEYCODES_COUNT < 32
   // which is true for this example. adjust type if more keycodes are needed
   static int stored_report = 0;
   int last_report = stored_report;
   int this_report = 0;
   for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-    if (key_bitmap_positions[i] >= report_len * 8) {
+    if (key_bitmap_positions[i] >= datafield_len * 8) {
       // error
-      Serial.printf("Error: consumer keycode position %d out of report data bound %u bits\r\n", key_bitmap_positions[i], report_len * 8);
+      Serial.printf("Error: consumer keycode position %d out of report data bound %u bits\r\n", key_bitmap_positions[i], datafield_len * 8);
       return 0;
     }
     if (key_bitmap_positions[i] >= 0) {
       int byte_pos = key_bitmap_positions[i] / 8;
       int bit_pos = key_bitmap_positions[i] % 8;
-      if (report[byte_pos] & (1 << bit_pos)) {
+      if (datafield[byte_pos] & (1 << bit_pos)) {
         this_report |= (1 << i);
       } else {
         this_report &= ~(1 << i);
@@ -405,8 +454,10 @@ uint16_t convert_bitmap_report_to_keycode(uint8_t const report[], uint16_t repor
 }
 
 //--------------------------------------------------------------------+
+// public facing
 // get_tuh_consumer_instance
-// return the instance number of the consumer control interface
+// return:
+//   the instance number of the consumer control interface, or 0 not initialized
 //--------------------------------------------------------------------+
 
 uint8_t get_tuh_consumer_instance() {
