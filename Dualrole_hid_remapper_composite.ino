@@ -194,13 +194,20 @@ extern "C" {
   }
 
   void remap_key(uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report, const hid_keyboard_report_t* original_report) {
-    // do nothing lmao
-    *remapped_id = RID_KEYBOARD;
     memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
+
+    // only remap if not empty report i.e key released
+    for (uint8_t i = 0; i < 6; i++) {
+      if (remapped_report->keycode[i] != 0) {
+        // Note: we ignore right shift here
+        remapped_report->modifier ^= KEYBOARD_MODIFIER_LEFTSHIFT;
+        break;
+      }
+    }
   }
 
   void remap_consumer_key(uint8_t* const remapped_id, uint16_t* remapped_report, const uint16_t original_report) {
-    // do nothing lmao
+    // do nothing
     *remapped_id = RID_CONSUMER_CONTROL;
     *remapped_report = original_report;
   }
