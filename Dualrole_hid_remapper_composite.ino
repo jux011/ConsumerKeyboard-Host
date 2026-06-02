@@ -194,6 +194,7 @@ extern "C" {
   }
 
   void remap_key(uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report, const hid_keyboard_report_t* original_report) {
+    *remapped_id = RID_KEYBOARD;
     memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
 
     // only remap if not empty report i.e key released
