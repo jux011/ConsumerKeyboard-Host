@@ -401,15 +401,14 @@ uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len
   }
   if (tuh_consumer_report_size == 1) {
     return convert_bitmap_report_to_keycode(report, report_len);
-    // } else if (tuh_consumer_report_size == 16) {
-  } else {
+  } else if (tuh_consumer_report_size == 16) {
     uint16_t data = 0;
     memcpy(&data, report, sizeof(uint16_t));
     return data;
-    // } else {
-    //   // error
-    //   Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", tuh_consumer_report_size);
-    //   return 0;
+  } else {
+    // error
+    Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", tuh_consumer_report_size);
+    return 0;
   }
 }
 
