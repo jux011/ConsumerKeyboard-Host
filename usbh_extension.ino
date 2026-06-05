@@ -369,7 +369,7 @@ bool tuh_compute_consumer_page_values(uint8_t const desc_report[], uint16_t cons
     Serial.printf("Consumer key 16bit datafield\r\n");
   } else {
     // error
-    Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", tuh_consumer_report_size);
+    Serial.printf("Error: consumer report size = %u not computed\r\n", tuh_consumer_report_size);
     return false;
   }
   return true;
@@ -407,7 +407,7 @@ uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len
     return data;
   } else {
     // error
-    Serial.printf("Error: consumer report size = %u not supported in this example !!\r\n", tuh_consumer_report_size);
+    Serial.printf("Error: consumer report size = %u not processed\r\n", tuh_consumer_report_size);
     return 0;
   }
 }
