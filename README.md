@@ -7,6 +7,7 @@ onboard USB in
 GPIO pin 6 pin 7 connected to USB out
 
 _no bluetooth, 2.4ghz_
+
 _wired only_
 
 ###### Software used:
