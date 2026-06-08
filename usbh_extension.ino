@@ -42,8 +42,8 @@ void tuh_init_consumer_settings() {
 // tuh_init_consumer_settings
 // sets all starting values and sets target_consumer_keys list
 // vars:
-//   target_keys_list: list of consumer keycodes to listen for
-//   target_keys_count: length of target_keys_list
+//   target_keys_list: input, list of consumer keycodes to listen for
+//   target_keys_count: input, length of target_keys_list
 // global variables updated:
 //   target_consumer_keys, key_bitmap_positions, CONSUMER_KEYCODES_COUNT,
 //   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
@@ -246,7 +246,7 @@ uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_
     }
 
     switch (desc_report[i] & 0b11) {
-      case 3: i += 5; break;  // HID 1.11 6.2.2.2 3 is 4 bytes
+      case 3: i += 5; break;  // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
       case 2: i += 3; break;
       case 1: i += 2; break;
       case 0: i += 1; break;
@@ -261,7 +261,7 @@ uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_
 
 //--------------------------------------------------------------------+
 // compute_consumer_report_bitmap
-// populates computed_bitmap[i] with the position of key[i] in field in in HID report data
+// populates computed_bitmap[i] with the position of key[i] in field in HID report data
 // vars:
 //   computed_bitmap: output, bitmap of positions of consumer keys in report data of attached keyboard, index starting from 0, -1 if key not found in report
 //   target_keys: input, list of consumer keycodes to listen for
@@ -390,7 +390,7 @@ uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len
   if (tuh_consumer_report_id > 0) {
     // report with report id: first byte is report id, adjust data pointer and length
     if (report_len < 1) {
-      Serial.printf("Error: received report with invalid report_length %u\r\n", report_len);
+      Serial.printf("Error: received malformed report with report_len %u, report id %u\r\n", report_len, tuh_consumer_report_id);
       return 0;
     } else if (report[0] != tuh_consumer_report_id) {
       Serial.printf("Error: received report with report_id %u, expected %u\r\n", report[0], tuh_consumer_report_id);
@@ -399,10 +399,12 @@ uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len
     report++;
     report_len--;
   }
+  
   if (tuh_consumer_report_size == 1) {
     return convert_bitmap_report_to_keycode(report, report_len);
   } else if (tuh_consumer_report_size == 16) {
     uint16_t data = 0;
+    // example: 0x96, 0x01 -> data = 0x0196 (little endian)
     memcpy(&data, report, sizeof(uint16_t));
     return data;
   } else {
@@ -449,14 +451,16 @@ uint16_t convert_bitmap_report_to_keycode(uint8_t const datafield[], uint16_t da
       return 0;  // indicate release with 0
     }
   }
-  return 0;  // no change
+  // none of the target_consumer_keys changed state
+  // but the function must return an answer
+  return 0;  // indicate release with 0
 }
 
 //--------------------------------------------------------------------+
 // public facing
 // get_tuh_consumer_instance
 // return:
-//   the instance number of the consumer control interface, or 0 not initialized
+//   the instance number of the consumer control interface, or 0 if not initialized
 //--------------------------------------------------------------------+
 
 uint8_t get_tuh_consumer_instance() {
