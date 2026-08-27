@@ -49,7 +49,7 @@ void tuh_init_consumer_settings() {
 //   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
 //--------------------------------------------------------------------+
 
-void tuh_init_consumer_settings(uint16_t target_keys_list[], const int target_keys_count) {
+void tuh_init_consumer_settings(const uint16_t target_keys_list[], const int target_keys_count) {
   if (target_consumer_keys != nullptr) {
     Serial.printf("Warning: target_consumer_keys already initialized, re-initializing with new target keys\r\n");
     delete[] target_consumer_keys;

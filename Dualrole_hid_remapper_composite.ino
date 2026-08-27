@@ -54,7 +54,7 @@ uint8_t const desc_hid_report[] = {
 
 // valid values can be found in enum{} on line 897
 // of Adafruit_TinyUSB_Library\src\class\hid\usages.h
-static uint16_t consumer_keys_list[6] = {
+static const uint16_t consumer_keys_list[6] = {
   HID_USAGE_CONSUMER_SCAN_PREVIOUS_TRACK,
   HID_USAGE_CONSUMER_PLAY_PAUSE,
   HID_USAGE_CONSUMER_SCAN_NEXT_TRACK,
