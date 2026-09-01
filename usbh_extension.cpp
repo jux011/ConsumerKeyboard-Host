@@ -1,111 +1,178 @@
 
 #include "usbh_extension.h"
-#include <cstdint>
 
 //--------------------------------------------------------------------+
 // ConsumerKeyboard_Host class
 // Wrapper class for managing consumer keyboard HID reports
 //--------------------------------------------------------------------+
 
-class ConsumerKeyboard_Host {
-public:
-    // Disallow default constructor
-    ConsumerKeyboard_Host() = delete;
-    
-    // Constructor with target keys list
-    ConsumerKeyboard_Host(const uint16_t target_keys_list[], const int target_keys_count) {
-      consumer_keycodes_count = target_keys_count;
-      target_consumer_keys = new uint16_t[target_keys_count];
-      key_bitmap_positions = new int[target_keys_count];
-      memcpy(this->target_consumer_keys, target_keys_list, this->consumer_keycodes_count * sizeof(uint16_t));
-    }
-    
-    // Destructor - cleanup allocated arrays
-    ~ConsumerKeyboard_Host() {
-      if (target_consumer_keys != nullptr) {
-        delete[] target_consumer_keys;
-        // target_consumer_keys = nullptr;
-      }
-      if (key_bitmap_positions != nullptr) {
-        delete[] key_bitmap_positions;
-        // key_bitmap_positions = nullptr;
-      }
-    }
-    
-    // Compute and cache consumer key positions from descriptor
-    int compute_consumer_keys_map(uint8_t const desc_report[], uint16_t desc_len, uint8_t instance) {
-      tuh_hid_report_info_t info;
-      uint16_t consumer_page_start, consumer_page_end;
-      bool found = tuh_hid_get_consumer_page(
-        &info, &consumer_page_start, &consumer_page_end,
-        desc_report, desc_len);
-      if (!found) {
-        return 1;
-      }
+// Constructor with target keys list
+ConsumerKeyboard_Host::ConsumerKeyboard_Host(const uint16_t target_keys_list[], const int target_keys_count)
+{
+  consumer_keycodes_count = target_keys_count;
+  target_consumer_keys = new uint16_t[target_keys_count];
+  key_bitmap_positions = new int[target_keys_count];
+  memcpy(this->target_consumer_keys, target_keys_list, this->consumer_keycodes_count * sizeof(uint16_t));
+}
 
-      uint8_t tuh_consumer_report_id = info.report_id;
-      uint16_t tuh_consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
+// Destructor - cleanup allocated arrays
+ConsumerKeyboard_Host::~ConsumerKeyboard_Host()
+{
+  if (this->target_consumer_keys != nullptr)
+  {
+    delete[] this->target_consumer_keys;
+    // target_consumer_keys = nullptr;
+  }
+  if (this->key_bitmap_positions != nullptr)
+  {
+    delete[] this->key_bitmap_positions;
+    // key_bitmap_positions = nullptr;
+  }
+}
 
-      if (tuh_consumer_report_size == 0) {
-        Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
-        return 2;
-      } else if (tuh_consumer_report_size == 1) {
-        Serial.printf("Consumer key 1bit bitmap\r\n");
-        compute_consumer_report_bitmap(
-          this->key_bitmap_positions,
-          this->target_consumer_keys,
-          this->consumer_keycodes_count,
-          desc_report,
-          consumer_page_start,
-          consumer_page_end
-        );
-        // // print consumer_map
-        // Serial.printf("Consumer key bitmap: \r\n");
-        // for (int i = 0; i < this->consumer_keycodes_count; i++) {
-        //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", this->target_consumer_keys[i], this->key_bitmap_positions[i]);
-        // }
-      } else if (tuh_consumer_report_size == 16) {
-        Serial.printf("Consumer key 16bit datafield\r\n");
-      } else {
-        // error
-        Serial.printf("Error: consumer report size = %u not computed\r\n", tuh_consumer_report_size);
-        return 3;
-      }
-      this->is_valid = true;
+// Compute and cache consumer key positions from descriptor
+int ConsumerKeyboard_Host::compute_consumer_keys_map(uint8_t const desc_report[], uint16_t desc_len, uint8_t instance)
+{
+  tuh_hid_report_info_t info;
+  uint16_t consumer_page_start, consumer_page_end;
+  bool found = tuh_hid_get_consumer_page(
+      &info, &consumer_page_start, &consumer_page_end,
+      desc_report, desc_len);
+  if (!found)
+  {
+    return 1;
+  }
+
+  this->tuh_consumer_report_id = info.report_id;
+  this->tuh_consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
+
+  if (this->tuh_consumer_report_size == 0)
+  {
+    Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
+    return 2;
+  }
+  else if (this->tuh_consumer_report_size == 1)
+  {
+    Serial.printf("Consumer key 1bit bitmap\r\n");
+    compute_consumer_report_bitmap(
+        this->key_bitmap_positions,
+        this->target_consumer_keys,
+        this->consumer_keycodes_count,
+        desc_report,
+        consumer_page_start,
+        consumer_page_end);
+    // // print consumer_map
+    // Serial.printf("Consumer key bitmap: \r\n");
+    // for (int i = 0; i < this->consumer_keycodes_count; i++) {
+    //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", this->target_consumer_keys[i], this->key_bitmap_positions[i]);
+    // }
+  }
+  else if (this->tuh_consumer_report_size == 16)
+  {
+    Serial.printf("Consumer key 16bit datafield\r\n");
+  }
+  else
+  {
+    // error
+    Serial.printf("Error: consumer report size = %u not computed\r\n", this->tuh_consumer_report_size);
+    return 3;
+  }
+  this->is_valid = true;
+  return 0;
+}
+
+// Cleanup and reset state
+void ConsumerKeyboard_Host::reset()
+{
+  if (this->key_bitmap_positions != nullptr)
+  {
+    delete[] this->key_bitmap_positions;
+    this->key_bitmap_positions = new int[this->consumer_keycodes_count];
+  }
+  this->is_valid = false;
+}
+
+// Process a consumer report and return the corresponding keycode
+uint16_t ConsumerKeyboard_Host::process_consumer_report(uint8_t const key_report[], uint16_t report_len)
+{
+  if (this->tuh_consumer_report_id > 0)
+  {
+    // report with report id: first byte is report id, adjust data pointer and length
+    if (report_len < 1)
+    {
+      Serial.printf("Error: received malformed report with report_len %u, report id %u\r\n", report_len, this->tuh_consumer_report_id);
       return 0;
     }
-    
-    // Cleanup and reset state
-    void reset() {
-      if (key_bitmap_positions != nullptr) {
-        delete[] key_bitmap_positions;
-        key_bitmap_positions = new int[this->consumer_keycodes_count];
+    else if (key_report[0] != this->tuh_consumer_report_id)
+    {
+      Serial.printf("Error: received report with report_id %u, expected %u\r\n", key_report[0], this->tuh_consumer_report_id);
+      // continue anyways
+    }
+    key_report++;
+    report_len--;
+  }
+
+  if (this->tuh_consumer_report_size == 1)
+  {
+    // assuming CONSUMER_KEYCODES_COUNT < 32
+    // which is true for this example. adjust type if more keycodes are needed
+    static int stored_report = 0;
+    int last_report = stored_report;
+    int this_report = 0;
+    for (int i = 0; i < this->consumer_keycodes_count; i++)
+    {
+      if (this->key_bitmap_positions[i] >= report_len * 8)
+      {
+        // error
+        Serial.printf("Error: consumer keycode position %d out of report data bound %u bits\r\n", this->key_bitmap_positions[i], report_len * 8);
+        return 0;
       }
-      this->is_valid = false;
+      if (this->key_bitmap_positions[i] >= 0)
+      {
+        int byte_pos = this->key_bitmap_positions[i] / 8;
+        int bit_pos = this->key_bitmap_positions[i] % 8;
+        if (key_report[byte_pos] & (1 << bit_pos))
+        {
+          this_report |= (1 << i);
+        }
+        else
+        {
+          this_report &= ~(1 << i);
+        }
+      }
     }
-    
-    // Process a consumer report and return the corresponding keycode
-    uint16_t process_consumer_report(uint8_t const key_report[], uint16_t report_len) {
-      return tuh_process_consumer_report(key_report, report_len);
+    stored_report = this_report;
+    for (int i = 0; i < this->consumer_keycodes_count; i++)
+    {
+      if ((this_report & (1 << i)) && !(last_report & (1 << i)))
+      {
+        // Serial.printf("Keycode 0x%04x pressed\r\n", this->target_consumer_keys[i]);
+        return this->target_consumer_keys[i]; // indicate press with keycode
+      }
+      else if (!(this_report & (1 << i)) && (last_report & (1 << i)))
+      {
+        // Serial.printf("Keycode 0x%04x released\r\n", this->target_consumer_keys[i]);
+        return 0; // indicate release with 0
+      }
     }
-
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    // none of the target_consumer_keys changed state
+    // but the function must return an answer
+    return 0; // indicate release with 0
+  }
+  else if (this->tuh_consumer_report_size == 16)
+  {
+    uint16_t data = 0;
+    // example: 0x96, 0x01 -> data = 0x0196 (little endian)
+    memcpy(&data, key_report, sizeof(uint16_t));
+    return data;
+  }
+  else
+  {
+    // error
+    Serial.printf("Error: consumer report size = %u not processed\r\n", this->tuh_consumer_report_size);
+    return 0;
+  }
+}
 
 //--------------------------------------------------------------------+
 // global variables for consumer page parsing and init
@@ -188,11 +255,14 @@ public:
 //   true if consumer page found and output values are set, false if consumer page not found and output values are cleared
 //--------------------------------------------------------------------+
 
-bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const consumer_page_start, uint16_t* const consumer_page_end, uint8_t const desc_report[], uint16_t desc_len) {
+bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t *const consumer_page_start, uint16_t *const consumer_page_end, uint8_t const desc_report[], uint16_t desc_len)
+{
   // Report Item 6.2.2.2 USB HID 1.11
-  union TU_ATTR_PACKED {
+  union TU_ATTR_PACKED
+  {
     uint8_t byte;
-    struct TU_ATTR_PACKED {
+    struct TU_ATTR_PACKED
+    {
       uint8_t size : 2;
       uint8_t type : 2;
       uint8_t tag : 4;
@@ -210,7 +280,8 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const con
   *consumer_page_start = 0;
   *consumer_page_end = 0;
 
-  while (desc_len) {
+  while (desc_len)
+  {
     header.byte = *desc_report++;
     desc_len--;
     bytes_read++;
@@ -218,96 +289,130 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const con
     uint8_t const tag = header.tag;
     uint8_t const type = header.type;
     uint8_t size = header.size;
-    if (size == 3) {
-      size = 4;  // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
+    if (size == 3)
+    {
+      size = 4; // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
     }
 
     uint8_t const data8 = (size > 0) ? desc_report[0] : 0;
 
-    switch (type) {
-      case RI_TYPE_MAIN:
-        switch (tag) {
-          case RI_MAIN_INPUT: break;
-          case RI_MAIN_OUTPUT: break;
-          case RI_MAIN_FEATURE: break;
-          case RI_MAIN_COLLECTION:
-            ri_collection_depth++;
-            break;
+    switch (type)
+    {
+    case RI_TYPE_MAIN:
+      switch (tag)
+      {
+      case RI_MAIN_INPUT:
+        break;
+      case RI_MAIN_OUTPUT:
+        break;
+      case RI_MAIN_FEATURE:
+        break;
+      case RI_MAIN_COLLECTION:
+        ri_collection_depth++;
+        break;
 
-          case RI_MAIN_COLLECTION_END:
-            ri_collection_depth--;
-            // if (ri_collection_depth == 0) {
-            // new report id
-            // }
-            if (info->usage_page == HID_USAGE_PAGE_CONSUMER) {
-              // done
-              *consumer_page_end = bytes_read;
-              return 1;
-            } else {
-              tu_memclr(info, sizeof(tuh_hid_report_info_t));
-              *consumer_page_start = bytes_read;
-            }
-            break;
-
-          default: break;
+      case RI_MAIN_COLLECTION_END:
+        ri_collection_depth--;
+        // if (ri_collection_depth == 0) {
+        // new report id
+        // }
+        if (info->usage_page == HID_USAGE_PAGE_CONSUMER)
+        {
+          // done
+          *consumer_page_end = bytes_read;
+          return 1;
+        }
+        else
+        {
+          tu_memclr(info, sizeof(tuh_hid_report_info_t));
+          *consumer_page_start = bytes_read;
         }
         break;
 
-      case RI_TYPE_GLOBAL:
-        switch (tag) {
-          case RI_GLOBAL_USAGE_PAGE:
-            // only take in account the "usage page" before REPORT ID
-            if (ri_collection_depth == 0) memcpy(&info->usage_page, desc_report, size);
-            break;
+      default:
+        break;
+      }
+      break;
 
-          case RI_GLOBAL_LOGICAL_MIN: break;
-          case RI_GLOBAL_LOGICAL_MAX: break;
-          case RI_GLOBAL_PHYSICAL_MIN: break;
-          case RI_GLOBAL_PHYSICAL_MAX: break;
-
-          case RI_GLOBAL_REPORT_ID:
-            info->report_id = data8;
-            break;
-
-          case RI_GLOBAL_REPORT_SIZE:
-            //            ri_report_size = data8;
-            break;
-
-          case RI_GLOBAL_REPORT_COUNT:
-            //            ri_report_count = data8;
-            break;
-
-          case RI_GLOBAL_UNIT_EXPONENT: break;
-          case RI_GLOBAL_UNIT: break;
-          case RI_GLOBAL_PUSH: break;
-          case RI_GLOBAL_POP: break;
-
-          default: break;
-        }
+    case RI_TYPE_GLOBAL:
+      switch (tag)
+      {
+      case RI_GLOBAL_USAGE_PAGE:
+        // only take in account the "usage page" before REPORT ID
+        if (ri_collection_depth == 0)
+          memcpy(&info->usage_page, desc_report, size);
         break;
 
-      case RI_TYPE_LOCAL:
-        switch (tag) {
-          case RI_LOCAL_USAGE:
-            // only take in account the "usage" before starting REPORT ID
-            if (ri_collection_depth == 0) info->usage = data8;
-            break;
-
-          case RI_LOCAL_USAGE_MIN: break;
-          case RI_LOCAL_USAGE_MAX: break;
-          case RI_LOCAL_DESIGNATOR_INDEX: break;
-          case RI_LOCAL_DESIGNATOR_MIN: break;
-          case RI_LOCAL_DESIGNATOR_MAX: break;
-          case RI_LOCAL_STRING_INDEX: break;
-          case RI_LOCAL_STRING_MIN: break;
-          case RI_LOCAL_STRING_MAX: break;
-          case RI_LOCAL_DELIMITER: break;
-          default: break;
-        }
+      case RI_GLOBAL_LOGICAL_MIN:
+        break;
+      case RI_GLOBAL_LOGICAL_MAX:
+        break;
+      case RI_GLOBAL_PHYSICAL_MIN:
+        break;
+      case RI_GLOBAL_PHYSICAL_MAX:
         break;
 
-        // error
-      default: break;
+      case RI_GLOBAL_REPORT_ID:
+        info->report_id = data8;
+        break;
+
+      case RI_GLOBAL_REPORT_SIZE:
+        //            ri_report_size = data8;
+        break;
+
+      case RI_GLOBAL_REPORT_COUNT:
+        //            ri_report_count = data8;
+        break;
+
+      case RI_GLOBAL_UNIT_EXPONENT:
+        break;
+      case RI_GLOBAL_UNIT:
+        break;
+      case RI_GLOBAL_PUSH:
+        break;
+      case RI_GLOBAL_POP:
+        break;
+
+      default:
+        break;
+      }
+      break;
+
+    case RI_TYPE_LOCAL:
+      switch (tag)
+      {
+      case RI_LOCAL_USAGE:
+        // only take in account the "usage" before starting REPORT ID
+        if (ri_collection_depth == 0)
+          info->usage = data8;
+        break;
+
+      case RI_LOCAL_USAGE_MIN:
+        break;
+      case RI_LOCAL_USAGE_MAX:
+        break;
+      case RI_LOCAL_DESIGNATOR_INDEX:
+        break;
+      case RI_LOCAL_DESIGNATOR_MIN:
+        break;
+      case RI_LOCAL_DESIGNATOR_MAX:
+        break;
+      case RI_LOCAL_STRING_INDEX:
+        break;
+      case RI_LOCAL_STRING_MIN:
+        break;
+      case RI_LOCAL_STRING_MAX:
+        break;
+      case RI_LOCAL_DELIMITER:
+        break;
+      default:
+        break;
+      }
+      break;
+
+      // error
+    default:
+      break;
     }
 
     desc_report += size;
@@ -327,7 +432,8 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t* const con
 // returns number of bits per key in HID report datafield
 //--------------------------------------------------------------------+
 
-uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end) {
+uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end)
+{
   // // Report Item 6.2.2.2 USB HID 1.11
   // union TU_ATTR_PACKED {
   //   uint8_t byte;
@@ -348,19 +454,30 @@ uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_
 
   int i = fragment_start;
 
-  while (i < fragment_end) {
-    if (desc_report[i] == target_byte) {
+  while (i < fragment_end)
+  {
+    if (desc_report[i] == target_byte)
+    {
       return desc_report[i + 1];
     }
 
-    switch (desc_report[i] & 0b11) {
-      case 3: i += 5; break;  // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
-      case 2: i += 3; break;
-      case 1: i += 2; break;
-      case 0: i += 1; break;
-      default:  //wtf
-        i = fragment_end;
-        break;
+    switch (desc_report[i] & 0b11)
+    {
+    case 3:
+      i += 5;
+      break; // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
+    case 2:
+      i += 3;
+      break;
+    case 1:
+      i += 2;
+      break;
+    case 0:
+      i += 1;
+      break;
+    default: // wtf
+      i = fragment_end;
+      break;
     }
   }
   // error
@@ -379,7 +496,8 @@ uint8_t get_consumer_report_size(uint8_t const desc_report[], uint16_t fragment_
 //   fragment_end: input, the ending index of consumer page in desc_report
 //--------------------------------------------------------------------+
 
-void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target_keys[], const int bitmap_len, uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end) {
+void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target_keys[], const int bitmap_len, uint8_t const desc_report[], uint16_t fragment_start, uint16_t fragment_end)
+{
   // // Report Item 6.2.2.2 USB HID 1.11
   // union TU_ATTR_PACKED {
   //   uint8_t byte;
@@ -405,36 +523,53 @@ void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target
   // ignore first usage: adjust starting point -1
   // start counting from 0 instead of 1: adjust starting point -1
   int usages_seen = -2;
-  while (i < fragment_end) {
-    if (desc_report[i] == target1_byte) {  // size = 1, data 00-FF
+  while (i < fragment_end)
+  {
+    if (desc_report[i] == target1_byte)
+    { // size = 1, data 00-FF
       usages_seen++;
-      for (int j = 0; j < bitmap_len; j++) {
-        if (target_keys[j] == desc_report[i + 1]) {
+      for (int j = 0; j < bitmap_len; j++)
+      {
+        if (target_keys[j] == desc_report[i + 1])
+        {
           computed_bitmap[j] = usages_seen;
           break;
         }
       }
-    } else if (desc_report[i] == target2_byte) {  // size = 2, data > FF
+    }
+    else if (desc_report[i] == target2_byte)
+    { // size = 2, data > FF
       usages_seen++;
       // example: 0x0A, 0x96, 0x01 -> data = 0x0196 (little endian)
       uint16_t data = 0;
       memcpy(&data, desc_report + i + 1, 2);
-      for (int j = 0; j < bitmap_len; j++) {
-        if (target_keys[j] == data) {
+      for (int j = 0; j < bitmap_len; j++)
+      {
+        if (target_keys[j] == data)
+        {
           computed_bitmap[j] = usages_seen;
           break;
         }
       }
     }
 
-    switch (desc_report[i] & 0b11) {
-      case 3: i += 5; break;  // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
-      case 2: i += 3; break;
-      case 1: i += 2; break;
-      case 0: i += 1; break;
-      default:  // wtf
-        i = fragment_end;
-        break;
+    switch (desc_report[i] & 0b11)
+    {
+    case 3:
+      i += 5;
+      break; // HID 1.11 6.2.2.2 size = 3 is actually 4 bytes
+    case 2:
+      i += 3;
+      break;
+    case 1:
+      i += 2;
+      break;
+    case 0:
+      i += 1;
+      break;
+    default: // wtf
+      i = fragment_end;
+      break;
     }
   }
 }
@@ -494,72 +629,15 @@ void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target
 //   the keycode corresponding to the report
 //--------------------------------------------------------------------+
 
-uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len) {
-  if (tuh_consumer_report_id > 0) {
-    // report with report id: first byte is report id, adjust data pointer and length
-    if (report_len < 1) {
-      Serial.printf("Error: received malformed report with report_len %u, report id %u\r\n", report_len, tuh_consumer_report_id);
-      return 0;
-    } else if (report[0] != tuh_consumer_report_id) {
-      Serial.printf("Error: received report with report_id %u, expected %u\r\n", report[0], tuh_consumer_report_id);
-      // continue anyways
-    }
-    report++;
-    report_len--;
-  }
-  
-  if (tuh_consumer_report_size == 1) {
-    return convert_bitmap_report_to_keycode(report, report_len);
-  } else if (tuh_consumer_report_size == 16) {
-    uint16_t data = 0;
-    // example: 0x96, 0x01 -> data = 0x0196 (little endian)
-    memcpy(&data, report, sizeof(uint16_t));
-    return data;
-  } else {
-    // error
-    Serial.printf("Error: consumer report size = %u not processed\r\n", tuh_consumer_report_size);
-    return 0;
-  }
-}
+// uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len)
+// {
+// }
 
 //--------------------------------------------------------------------+
 // convert_bitmap_report_to_keycode
 // converts a bitmap report to a 16-bit single keycode indicating which key is pressed/released
 //--------------------------------------------------------------------+
 
-uint16_t convert_bitmap_report_to_keycode(uint8_t const datafield[], uint16_t datafield_len) {
-  // assuming CONSUMER_KEYCODES_COUNT < 32
-  // which is true for this example. adjust type if more keycodes are needed
-  static int stored_report = 0;
-  int last_report = stored_report;
-  int this_report = 0;
-  for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-    if (key_bitmap_positions[i] >= datafield_len * 8) {
-      // error
-      Serial.printf("Error: consumer keycode position %d out of report data bound %u bits\r\n", key_bitmap_positions[i], datafield_len * 8);
-      return 0;
-    }
-    if (key_bitmap_positions[i] >= 0) {
-      int byte_pos = key_bitmap_positions[i] / 8;
-      int bit_pos = key_bitmap_positions[i] % 8;
-      if (datafield[byte_pos] & (1 << bit_pos)) {
-        this_report |= (1 << i);
-      } else {
-        this_report &= ~(1 << i);
-      }
-    }
-  }
-  stored_report = this_report;
-  for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-    if ((this_report & (1 << i)) && !(last_report & (1 << i))) {
-      // Serial.printf("Keycode 0x%04x pressed\r\n", consumer_bitmap[i].keycode);
-      return target_consumer_keys[i];  // indicate press with keycode
-    } else if (!(this_report & (1 << i)) && (last_report & (1 << i))) {
-      // Serial.printf("Keycode 0x%04x released\r\n", consumer_bitmap[i].keycode);
-      return 0;  // indicate release with 0
-    }
-  }
-  // none of the target_consumer_keys changed state
-  // but the function must return an answer
-  return 0;  // indicate release with 0
-}
+// uint16_t convert_bitmap_report_to_keycode(uint8_t const datafield[], uint16_t datafield_len)
+// {
+// }
