@@ -1,68 +1,201 @@
 
+#include "usbh_extension.h"
+
+//--------------------------------------------------------------------+
+// ConsumerKeyboard_Host class
+// Wrapper class for managing consumer keyboard HID reports
+//--------------------------------------------------------------------+
+
+class ConsumerKeyboard_Host {
+public:
+    // Disallow default constructor
+    ConsumerKeyboard_Host() = delete;
+    
+    // Constructor with target keys list
+    ConsumerKeyboard_Host(const uint16_t target_keys_list[], const int target_keys_count) {
+      consumer_keycodes_count = target_keys_count;
+      target_consumer_keys = new uint16_t[target_keys_count];
+      key_bitmap_positions = new int[target_keys_count];
+      memcpy(target_consumer_keys, target_keys_list, consumer_keycodes_count * sizeof(uint16_t));
+    }
+    
+    // Destructor - cleanup allocated arrays
+    ~ConsumerKeyboard_Host() {
+      if (target_consumer_keys != nullptr) {
+        delete[] target_consumer_keys;
+        target_consumer_keys = nullptr;
+      }
+      if (key_bitmap_positions != nullptr) {
+        delete[] key_bitmap_positions;
+        key_bitmap_positions = nullptr;
+      }
+    }
+    
+    // Compute and cache consumer key positions from descriptor
+    int compute_consumer_keys_map(uint8_t const desc_report[], uint16_t desc_len, uint8_t instance) {
+      tuh_hid_report_info_t info;
+      uint16_t consumer_page_start, consumer_page_end;
+      bool found = tuh_hid_get_consumer_page(
+        &info, &consumer_page_start, &consumer_page_end,
+        desc_report, desc_len);
+      if (!found) {
+        return 1;
+      }
+
+      uint8_t tuh_consumer_report_id = info.report_id;
+      uint16_t tuh_consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
+
+      if (tuh_consumer_report_size == 0) {
+        Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
+        return 2;
+      } else if (tuh_consumer_report_size == 1) {
+        Serial.printf("Consumer key 1bit bitmap\r\n");
+        compute_consumer_report_bitmap(
+          key_bitmap_positions,
+          target_consumer_keys,
+          consumer_keycodes_count,
+          desc_report,
+          consumer_page_start,
+          consumer_page_end
+        );
+        // // print consumer_map
+        // Serial.printf("Consumer key bitmap: \r\n");
+        // for (int i = 0; i < consumer_keycodes_count; i++) {
+        //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", this->target_consumer_keys[i], this->key_bitmap_positions[i]);
+        // }
+      } else if (tuh_consumer_report_size == 16) {
+        Serial.printf("Consumer key 16bit datafield\r\n");
+      } else {
+        // error
+        Serial.printf("Error: consumer report size = %u not computed\r\n", tuh_consumer_report_size);
+        return 3;
+      }
+      this->is_valid = true;
+      return 0;
+    }
+    
+    // // Cleanup and reset state
+    // void end() {
+    //   if (target_consumer_keys != nullptr) {
+    //     delete[] target_consumer_keys;
+    //     target_consumer_keys = nullptr;
+    //   }
+    //   if (key_bitmap_positions != nullptr) {
+    //     delete[] key_bitmap_positions;
+    //     key_bitmap_positions = nullptr;
+    //   }
+    // }
+    
+    // Get the consumer control interface instance number
+    uint8_t get_tuh_consumer_instance() {
+        return this->tuh_consumer_instance;
+    }
+    
+    // Process a consumer report and return the corresponding keycode
+    uint16_t process_consumer_report(uint8_t const key_report[], uint16_t report_len) {
+      return tuh_process_consumer_report(key_report, report_len);
+    }
+
+    bool is_valid = false;
+
+private:
+
+    // list of consumer keys to listen for
+    uint16_t* target_consumer_keys = nullptr;
+
+    // count of target consumer keys
+    int consumer_keycodes_count = 0;
+
+    // bitmap of positions of consumer keys in report data of attached keyboard
+    // index starting from 0, -1 if key not found in report
+    int* key_bitmap_positions = nullptr;
+
+    uint8_t tuh_consumer_instance = 0;
+
+};
+
+#endif  // USBH_EXTENSION_H
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //--------------------------------------------------------------------+
 // global variables for consumer page parsing and init
 //--------------------------------------------------------------------+
 
-// list of consumer keys to listen for
-static uint16_t* target_consumer_keys = nullptr;
-// bitmap of positions of consumer keys in report data of attached keyboard
-// index starting from 0, -1 if key not found in report
-static int* key_bitmap_positions = nullptr;
-// len(target_consumer_keys)
-static int CONSUMER_KEYCODES_COUNT;
+// // list of consumer keys to listen for
+// static uint16_t* target_consumer_keys = nullptr;
+// // bitmap of positions of consumer keys in report data of attached keyboard
+// // index starting from 0, -1 if key not found in report
+// static int* key_bitmap_positions = nullptr;
+// // len(target_consumer_keys)
+// static int CONSUMER_KEYCODES_COUNT;
 
-static uint8_t tuh_consumer_report_size;
-static uint8_t tuh_consumer_instance;
-static uint8_t tuh_consumer_report_id;
+// static uint8_t tuh_consumer_report_size;
+// static uint8_t tuh_consumer_instance;
+// static uint8_t tuh_consumer_report_id;
 
-//--------------------------------------------------------------------+
-// public facing
-// tuh_init_consumer_settings
-// sets all starting values
-// global variables updated:
-//   key_bitmap_positions,
-//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
-//--------------------------------------------------------------------+
+// //--------------------------------------------------------------------+
+// // public facing
+// // tuh_init_consumer_settings
+// // sets all starting values
+// // global variables updated:
+// //   key_bitmap_positions,
+// //   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
+// //--------------------------------------------------------------------+
 
-void tuh_init_consumer_settings() {
-  if (key_bitmap_positions == nullptr) {
-    Serial.printf("Error: key_bitmap_positions not initialized\r\n");
-  } else {
-    for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-      key_bitmap_positions[i] = -1;
-    }
-  }
-  tuh_consumer_report_size = 0;
-  tuh_consumer_instance = 0;
-  tuh_consumer_report_id = 0;
-}
+// void tuh_init_consumer_settings() {
+//   if (key_bitmap_positions == nullptr) {
+//     Serial.printf("Error: key_bitmap_positions not initialized\r\n");
+//   } else {
+//     for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
+//       key_bitmap_positions[i] = -1;
+//     }
+//   }
+//   tuh_consumer_report_size = 0;
+//   tuh_consumer_instance = 0;
+//   tuh_consumer_report_id = 0;
+// }
 
-//--------------------------------------------------------------------+
-// public facing
-// tuh_init_consumer_settings
-// sets all starting values and sets target_consumer_keys list
-// vars:
-//   target_keys_list: input, list of consumer keycodes to listen for
-//   target_keys_count: input, length of target_keys_list
-// global variables updated:
-//   target_consumer_keys, key_bitmap_positions, CONSUMER_KEYCODES_COUNT,
-//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
-//--------------------------------------------------------------------+
+// //--------------------------------------------------------------------+
+// // public facing
+// // tuh_init_consumer_settings
+// // sets all starting values and sets target_consumer_keys list
+// // vars:
+// //   target_keys_list: input, list of consumer keycodes to listen for
+// //   target_keys_count: input, length of target_keys_list
+// // global variables updated:
+// //   target_consumer_keys, key_bitmap_positions, CONSUMER_KEYCODES_COUNT,
+// //   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
+// //--------------------------------------------------------------------+
 
-void tuh_init_consumer_settings(const uint16_t target_keys_list[], const int target_keys_count) {
-  if (target_consumer_keys != nullptr) {
-    Serial.printf("Warning: target_consumer_keys already initialized, re-initializing with new target keys\r\n");
-    delete[] target_consumer_keys;
-    delete[] key_bitmap_positions;
-    // target_consumer_keys = nullptr;
-    // key_bitmap_positions = nullptr;
-  }
-  CONSUMER_KEYCODES_COUNT = target_keys_count;
-  target_consumer_keys = new uint16_t[target_keys_count];
-  key_bitmap_positions = new int[target_keys_count];
-  memcpy(target_consumer_keys, target_keys_list, target_keys_count * sizeof(uint16_t));
-  tuh_init_consumer_settings();
-}
+// void tuh_init_consumer_settings(const uint16_t target_keys_list[], const int target_keys_count) {
+//   if (target_consumer_keys != nullptr) {
+//     Serial.printf("Warning: target_consumer_keys already initialized, re-initializing with new target keys\r\n");
+//     delete[] target_consumer_keys;
+//     delete[] key_bitmap_positions;
+//     // target_consumer_keys = nullptr;
+//     // key_bitmap_positions = nullptr;
+//   }
+//   CONSUMER_KEYCODES_COUNT = target_keys_count;
+//   target_consumer_keys = new uint16_t[target_keys_count];
+//   key_bitmap_positions = new int[target_keys_count];
+//   memcpy(target_consumer_keys, target_keys_list, target_keys_count * sizeof(uint16_t));
+//   tuh_init_consumer_settings();
+// }
 
 //--------------------------------------------------------------------+
 // public facing
