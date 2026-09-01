@@ -43,6 +43,7 @@ int ConsumerKeyboard_Host::compute_consumer_keys_map(uint8_t const desc_report[]
     return 1;
   }
 
+  this->tuh_consumer_instance = instance;
   this->tuh_consumer_report_id = info.report_id;
   this->tuh_consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
 
