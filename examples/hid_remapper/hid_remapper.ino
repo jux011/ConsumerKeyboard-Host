@@ -66,6 +66,8 @@ static const uint16_t consumer_keys_list[6] = {
 // USB HID object
 Adafruit_USBD_HID usb_hid;
 
+ConsumerKeyboard_Host consumer_keyboard_parser(consumer_keys_list, 6);
+
 //--------------------------------------------------------------------+
 // For RP2040 use both core0 for device stack, core1 for host stack
 //--------------------------------------------------------------------+
@@ -120,8 +122,6 @@ void setup1() {
   // configure pio-usb: defined in usbh_helper.h
   rp2040_configure_pio_usb();
 
-  tuh_init_consumer_settings(consumer_keys_list, 6);
-
   // run host stack on controller (rhport) 1
   // Note: For rp2040 pico-pio-usb, calling USBHost.begin() on core1 will have most of the
   // host bit-banging processing works done in core1 to free up core0 for other works
@@ -160,22 +160,9 @@ extern "C" {
       return;
     }
 
-    tuh_hid_report_info_t info;
-    uint16_t consumer_page_start, consumer_page_end;
-    bool found = tuh_hid_get_consumer_page(
-      &info, &consumer_page_start, &consumer_page_end,
-      desc_report, desc_len);
-    if (!found) {
+    int status = consumer_keyboard_parser.compute_consumer_keys_map(desc_report, desc_len, instance);
+    if (status != 0) {
       // Serial.printf("this instance is not a keyboard protocol");
-      return;
-    }
-
-    Serial.printf("HID Consumer Control\r\n");
-    bool success = tuh_compute_consumer_page_values(
-      desc_report, consumer_page_start, consumer_page_end,
-      instance, info.report_id);
-    if (!success) {
-      Serial.printf("Error: cannot compute report_size, instance, report_id, \r\n");
       return;
     }
 
@@ -188,8 +175,8 @@ extern "C" {
   // Invoked when device with hid interface is un-mounted
   void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
     Serial.printf("HID device address = %d, instance = %d is unmounted\r\n", dev_addr, instance);
-    if (instance == get_tuh_consumer_instance()) {
-      tuh_init_consumer_settings();
+    if (instance == consumer_keyboard_parser.get_tuh_consumer_instance()) {
+      consumer_keyboard_parser.reset();
     }
   }
 
@@ -229,9 +216,9 @@ extern "C" {
       }
 
       usb_hid.sendReport(target_id, &report_to_send, sizeof(report_to_send));
-    } else if (instance == get_tuh_consumer_instance()) {
+    } else if (instance == consumer_keyboard_parser.get_tuh_consumer_instance()) {
       // Serial.printf("Received report from consumer control instance %d, len = %u\r\n", instance, len);
-      uint16_t report_consumer_key = tuh_process_consumer_report(report, len);
+      uint16_t report_consumer_key = consumer_keyboard_parser.process_consumer_report(report, len);
       uint16_t report_to_send = 0;
       uint8_t target_id;
       remap_consumer_key(&target_id, &report_to_send, report_consumer_key);

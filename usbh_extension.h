@@ -12,18 +12,8 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[],
                                uint8_t const desc_report[], 
                                uint16_t desc_len);
 
-// Compute and store consumer page values from report descriptor
-bool tuh_compute_consumer_page_values(uint8_t const desc_report[], 
-                                      uint16_t consumer_page_start, 
-                                      uint16_t consumer_page_end,
-                                      uint8_t instance, 
-                                      uint8_t report_id);
-
 // Process a consumer report and return the corresponding keycode
 uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len);
-
-// Get the consumer control interface instance number
-uint8_t get_tuh_consumer_instance();
 
 // Get the report size (in bits) for consumer keys from report descriptor
 uint8_t get_consumer_report_size(uint8_t const desc_report[], 
@@ -57,32 +47,34 @@ public:
     // Destructor - cleanup allocated arrays
     ~ConsumerKeyboard_Host();
     
-    // Initialize with report descriptor
-    int begin(uint8_t const desc_report[], uint16_t desc_len);
+    // Compute and cache consumer key positions from descriptor
+    int compute_consumer_keys_map(uint8_t const desc_report[], uint16_t desc_len, uint8_t instance);
     
     // Cleanup and reset state
-    void end();
+    void reset();
     
     // Get the consumer control interface instance number
     uint8_t get_tuh_consumer_instance() {
-        return tuh_consumer_instance;
+        return this->tuh_consumer_instance;
     }
-    
-    // Compute and cache consumer key positions from descriptor
-    bool compute_consumer_keys_map();
     
     // Process a consumer report and return the corresponding keycode
     uint16_t process_consumer_report(uint8_t const key_report[], uint16_t report_len);
+
+    bool is_valid = false;
 
 private:
     // list of consumer keys to listen for
     uint16_t* target_consumer_keys = nullptr;
 
+    // count of target consumer keys
+    int consumer_keycodes_count = 0;
+
     // bitmap of positions of consumer keys in report data of attached keyboard
     // index starting from 0, -1 if key not found in report
     int* key_bitmap_positions = nullptr;
 
-    uint8_t tuh_consumer_instance;
+    uint8_t tuh_consumer_instance = 0;
 };
 
 #endif  // USBH_EXTENSION_H

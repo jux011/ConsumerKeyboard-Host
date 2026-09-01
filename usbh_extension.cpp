@@ -1,5 +1,6 @@
 
 #include "usbh_extension.h"
+#include <cstdint>
 
 //--------------------------------------------------------------------+
 // ConsumerKeyboard_Host class
@@ -16,18 +17,18 @@ public:
       consumer_keycodes_count = target_keys_count;
       target_consumer_keys = new uint16_t[target_keys_count];
       key_bitmap_positions = new int[target_keys_count];
-      memcpy(target_consumer_keys, target_keys_list, consumer_keycodes_count * sizeof(uint16_t));
+      memcpy(this->target_consumer_keys, target_keys_list, this->consumer_keycodes_count * sizeof(uint16_t));
     }
     
     // Destructor - cleanup allocated arrays
     ~ConsumerKeyboard_Host() {
       if (target_consumer_keys != nullptr) {
         delete[] target_consumer_keys;
-        target_consumer_keys = nullptr;
+        // target_consumer_keys = nullptr;
       }
       if (key_bitmap_positions != nullptr) {
         delete[] key_bitmap_positions;
-        key_bitmap_positions = nullptr;
+        // key_bitmap_positions = nullptr;
       }
     }
     
@@ -51,16 +52,16 @@ public:
       } else if (tuh_consumer_report_size == 1) {
         Serial.printf("Consumer key 1bit bitmap\r\n");
         compute_consumer_report_bitmap(
-          key_bitmap_positions,
-          target_consumer_keys,
-          consumer_keycodes_count,
+          this->key_bitmap_positions,
+          this->target_consumer_keys,
+          this->consumer_keycodes_count,
           desc_report,
           consumer_page_start,
           consumer_page_end
         );
         // // print consumer_map
         // Serial.printf("Consumer key bitmap: \r\n");
-        // for (int i = 0; i < consumer_keycodes_count; i++) {
+        // for (int i = 0; i < this->consumer_keycodes_count; i++) {
         //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", this->target_consumer_keys[i], this->key_bitmap_positions[i]);
         // }
       } else if (tuh_consumer_report_size == 16) {
@@ -74,21 +75,13 @@ public:
       return 0;
     }
     
-    // // Cleanup and reset state
-    // void end() {
-    //   if (target_consumer_keys != nullptr) {
-    //     delete[] target_consumer_keys;
-    //     target_consumer_keys = nullptr;
-    //   }
-    //   if (key_bitmap_positions != nullptr) {
-    //     delete[] key_bitmap_positions;
-    //     key_bitmap_positions = nullptr;
-    //   }
-    // }
-    
-    // Get the consumer control interface instance number
-    uint8_t get_tuh_consumer_instance() {
-        return this->tuh_consumer_instance;
+    // Cleanup and reset state
+    void reset() {
+      if (key_bitmap_positions != nullptr) {
+        delete[] key_bitmap_positions;
+        key_bitmap_positions = new int[this->consumer_keycodes_count];
+      }
+      this->is_valid = false;
     }
     
     // Process a consumer report and return the corresponding keycode
@@ -96,25 +89,7 @@ public:
       return tuh_process_consumer_report(key_report, report_len);
     }
 
-    bool is_valid = false;
-
-private:
-
-    // list of consumer keys to listen for
-    uint16_t* target_consumer_keys = nullptr;
-
-    // count of target consumer keys
-    int consumer_keycodes_count = 0;
-
-    // bitmap of positions of consumer keys in report data of attached keyboard
-    // index starting from 0, -1 if key not found in report
-    int* key_bitmap_positions = nullptr;
-
-    uint8_t tuh_consumer_instance = 0;
-
 };
-
-#endif  // USBH_EXTENSION_H
 
 
 
@@ -464,49 +439,49 @@ void compute_consumer_report_bitmap(int computed_bitmap[], uint16_t const target
   }
 }
 
-//--------------------------------------------------------------------+
-// public facing
-// tuh_compute_consumer_page_values
-// parses desc_report and initializes all settings related to consumer page
-//   vars:
-//   desc_report: input, the report descriptor to parse
-//   consumer_page_start: input, the starting index of consumer page in desc_report
-//   consumer_page_end: input, the ending index of consumer page in desc_report
-//   instance: input, the instance number of the consumer control interface
-//   report_id: input, the report id of the consumer control report
-// return:
-//   true if consumer page found and output values are set, false if consumer page not found in this instance
-// global variables set:
-//   key_bitmap_positions,
-//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
-//--------------------------------------------------------------------+
+// //--------------------------------------------------------------------+
+// // public facing
+// // tuh_compute_consumer_page_values
+// // parses desc_report and initializes all settings related to consumer page
+// //   vars:
+// //   desc_report: input, the report descriptor to parse
+// //   consumer_page_start: input, the starting index of consumer page in desc_report
+// //   consumer_page_end: input, the ending index of consumer page in desc_report
+// //   instance: input, the instance number of the consumer control interface
+// //   report_id: input, the report id of the consumer control report
+// // return:
+// //   true if consumer page found and output values are set, false if consumer page not found in this instance
+// // global variables set:
+// //   key_bitmap_positions,
+// //   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
+// //--------------------------------------------------------------------+
 
-bool tuh_compute_consumer_page_values(uint8_t const desc_report[], uint16_t consumer_page_start, uint16_t consumer_page_end,
-                                      uint8_t instance, uint8_t report_id) {
-  tuh_consumer_instance = instance;
-  tuh_consumer_report_id = report_id;
-  tuh_consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
+// bool tuh_compute_consumer_page_values(uint8_t const desc_report[], uint16_t consumer_page_start, uint16_t consumer_page_end,
+//                                       uint8_t instance, uint8_t report_id) {
+//   tuh_consumer_instance = instance;
+//   tuh_consumer_report_id = report_id;
+//   tuh_consumer_report_size = get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
 
-  if (tuh_consumer_report_size == 0) {
-    Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
-    return false;
-  } else if (tuh_consumer_report_size == 1) {
-    Serial.printf("Consumer key 1bit bitmap\r\n");
-    compute_consumer_report_bitmap(key_bitmap_positions, target_consumer_keys, CONSUMER_KEYCODES_COUNT, desc_report, consumer_page_start, consumer_page_end);
-    // // print consumer_map
-    // Serial.printf("Consumer key bitmap: \r\n");
-    // for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
-    //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", target_consumer_keys[i], key_bitmap_positions[i]);
-    // }
-  } else if (tuh_consumer_report_size == 16) {
-    Serial.printf("Consumer key 16bit datafield\r\n");
-  } else {
-    // error
-    Serial.printf("Error: consumer report size = %u not computed\r\n", tuh_consumer_report_size);
-    return false;
-  }
-  return true;
-}
+//   if (tuh_consumer_report_size == 0) {
+//     Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
+//     return false;
+//   } else if (tuh_consumer_report_size == 1) {
+//     Serial.printf("Consumer key 1bit bitmap\r\n");
+//     compute_consumer_report_bitmap(key_bitmap_positions, target_consumer_keys, CONSUMER_KEYCODES_COUNT, desc_report, consumer_page_start, consumer_page_end);
+//     // // print consumer_map
+//     // Serial.printf("Consumer key bitmap: \r\n");
+//     // for (int i = 0; i < CONSUMER_KEYCODES_COUNT; i++) {
+//     //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", target_consumer_keys[i], key_bitmap_positions[i]);
+//     // }
+//   } else if (tuh_consumer_report_size == 16) {
+//     Serial.printf("Consumer key 16bit datafield\r\n");
+//   } else {
+//     // error
+//     Serial.printf("Error: consumer report size = %u not computed\r\n", tuh_consumer_report_size);
+//     return false;
+//   }
+//   return true;
+// }
 
 //--------------------------------------------------------------------+
 // public facing
@@ -587,15 +562,4 @@ uint16_t convert_bitmap_report_to_keycode(uint8_t const datafield[], uint16_t da
   // none of the target_consumer_keys changed state
   // but the function must return an answer
   return 0;  // indicate release with 0
-}
-
-//--------------------------------------------------------------------+
-// public facing
-// get_tuh_consumer_instance
-// return:
-//   the instance number of the consumer control interface, or 0 if not initialized
-//--------------------------------------------------------------------+
-
-uint8_t get_tuh_consumer_instance() {
-  return tuh_consumer_instance;
 }
