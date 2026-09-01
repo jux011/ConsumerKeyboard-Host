@@ -1,9 +1,9 @@
 #ifndef USBH_EXTENSION_H
 #define USBH_EXTENSION_H
 
-#include <stdint.h>
-#include <cstring>
-#include "Adafruit_TinyUSB.h"
+#ifndef ADAFRUIT_TINYUSB_H_
+#error "This file requires Adafruit_TinyUSB.h to be included first"
+#endif
 
 //--------------------------------------------------------------------+
 // Static global variables for consumer page parsing and init
