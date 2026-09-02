@@ -1,8 +1,6 @@
-
 #include "usbh_extension.h"
 
 //--------------------------------------------------------------------+
-// public facing
 // tuh_hid_get_consumer_page
 // adapted from tuh_hid_parse_report_descriptor()
 // Arduino\libraries\Adafruit_TinyUSB_Library\src\class\hid\hid_host.c
@@ -16,7 +14,6 @@
 // return:
 //   true if consumer page found and output values are set, false if consumer page not found and output values are cleared
 //--------------------------------------------------------------------+
-
 bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t *const consumer_page_start, uint16_t *const consumer_page_end, uint8_t const desc_report[], uint16_t desc_len)
 {
   // Report Item 6.2.2.2 USB HID 1.11
@@ -192,8 +189,8 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[], uint16_t *const con
 //--------------------------------------------------------------------+
 // tuh_hid_get_consumer_report_size
 // returns number of bits per key in HID report datafield
+// expecting values 1 or 16
 //--------------------------------------------------------------------+
-
 uint8_t tuh_hid_get_consumer_report_size(uint8_t const desc_report[], uint16_t const fragment_start, uint16_t const fragment_end)
 {
   // // Report Item 6.2.2.2 USB HID 1.11
@@ -257,7 +254,6 @@ uint8_t tuh_hid_get_consumer_report_size(uint8_t const desc_report[], uint16_t c
 //   fragment_start: input, the starting index of consumer page in desc_report
 //   fragment_end: input, the ending index of consumer page in desc_report
 //--------------------------------------------------------------------+
-
 void tuh_hid_compute_key_bitmap_positions(int computed_bitmap[], uint16_t const target_keys[], const int bitmap_len, uint8_t const desc_report[], uint16_t const fragment_start, uint16_t const fragment_end)
 {
   // // Report Item 6.2.2.2 USB HID 1.11
@@ -336,7 +332,16 @@ void tuh_hid_compute_key_bitmap_positions(int computed_bitmap[], uint16_t const 
   }
 }
 
-uint16_t tuh_hid_process_consumer_report_16bit(uint8_t const report[], uint16_t const report_len)
+//--------------------------------------------------------------------+
+// tuh_hid_process_consumer_report_16bit
+// processes a consumer report in 16-bit format
+// vars:
+//   key_report: input, the key report in 16-bit format received from attached keyboard
+//   report_len: input, length of report
+// return:
+//   the keycode corresponding to the report
+//--------------------------------------------------------------------+
+uint16_t tuh_hid_process_consumer_report_16bit(uint8_t const key_report[], uint16_t const report_len)
 {
     if (report_len < sizeof(uint16_t))
     {
@@ -345,10 +350,22 @@ uint16_t tuh_hid_process_consumer_report_16bit(uint8_t const report[], uint16_t 
     }
     uint16_t data = 0;
     // example: 0x96, 0x01 -> data = 0x0196 (little endian)
-    memcpy(&data, report, sizeof(uint16_t));
+    memcpy(&data, key_report, sizeof(uint16_t));
     return data;
 }
 
+//--------------------------------------------------------------------+
+// tuh_hid_process_consumer_report_1bit
+// processes a consumer report in 1-bit format
+// vars:
+//   key_report: input, the key report in 1-bit format received from attached keyboard
+//   report_len: input, length of report
+//   key_bitmap_positions: input, bitmap of positions of consumer keys in report data
+//   target_keys: input, list of consumer keycodes to listen for
+//   bitmap_len: input, length of key_bitmap_positions and target_keys
+// return:
+//   the keycode corresponding to the report
+//--------------------------------------------------------------------+
 uint16_t tuh_hid_process_consumer_report_1bit(uint8_t const key_report[], uint16_t const report_len,
                                               int const key_bitmap_positions[],
                                               uint16_t const target_keys[],
@@ -400,18 +417,30 @@ uint16_t tuh_hid_process_consumer_report_1bit(uint8_t const key_report[], uint16
   return 0; // indicate release with 0
 }
 
+
 //--------------------------------------------------------------------+
 // ConsumerKeyboard_Host class
 // Wrapper class for managing consumer keyboard HID reports
 //--------------------------------------------------------------------+
 
-// Constructor with target keys list
+// vars defined in usbh_extension.h
+
+//--------------------------------------------------------------------+
+// public facing
+// ConsumerKeyboard_Host constructor
+// sets all starting values and sets target_consumer_keys list
+// vars:
+//   target_keys_list: input, list of consumer keycodes to listen for
+//   target_keys_count: input, length of target_keys_list
+// class variables updated:
+//   target_consumer_keys, key_bitmap_positions, consumer_keycodes_count
+//--------------------------------------------------------------------+
 ConsumerKeyboard_Host::ConsumerKeyboard_Host(uint16_t const target_keys_list[], int const target_keys_count)
 {
   this->consumer_keycodes_count = target_keys_count;
   this->target_consumer_keys = new uint16_t[target_keys_count];
   this->key_bitmap_positions = new int[target_keys_count];
-  memcpy(this->target_consumer_keys, target_keys_list, this->consumer_keycodes_count * sizeof(uint16_t));
+  memcpy(this->target_consumer_keys, target_keys_list, target_keys_count * sizeof(uint16_t));
   for (int i = 0; i < target_keys_count; i++)
   {
     this->key_bitmap_positions[i] = -1; // initialize all positions to -1 (not found)
@@ -433,7 +462,22 @@ ConsumerKeyboard_Host::~ConsumerKeyboard_Host()
   }
 }
 
-// Compute and cache consumer key positions from descriptor
+//--------------------------------------------------------------------+
+// public facing
+// process_desc_report
+// parses desc_report and initializes all settings related to consumer page
+//   vars:
+//   desc_report: input, the report descriptor to parse
+//   desc_len: input, length of desc_report
+//   instance: input, the instance number of the consumer control interface
+// return:
+//   0 if consumer page found and output values are set
+//   1 if consumer page not found in this instance
+//   >1 if there is an error in parsing the report descriptor
+// class variables updated:
+//   key_bitmap_positions, is_valid,
+//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
+//--------------------------------------------------------------------+
 int ConsumerKeyboard_Host::process_desc_report(uint8_t const desc_report[], uint16_t const desc_len, uint8_t const instance)
 {
   tuh_hid_report_info_t info;
@@ -485,18 +529,30 @@ int ConsumerKeyboard_Host::process_desc_report(uint8_t const desc_report[], uint
   return 0;
 }
 
-// Cleanup and reset state
+//--------------------------------------------------------------------+
+// public facing
+// reset key_bitmap_positions
+//--------------------------------------------------------------------+
 void ConsumerKeyboard_Host::reset()
 {
   if (this->key_bitmap_positions != nullptr)
   {
     delete[] this->key_bitmap_positions;
-    this->key_bitmap_positions = new int[this->consumer_keycodes_count];
   }
+  this->key_bitmap_positions = new int[this->consumer_keycodes_count];
   this->is_valid = false;
 }
 
-// Process a consumer report and return the corresponding keycode
+//--------------------------------------------------------------------+
+// public facing
+// process_consumer_report
+// process a consumer report and return keycode for a changed keypress
+// vars:
+//   key_report: input, the consumer report received from attached keyboard
+//   report_len: input, length of report
+// return:
+//   the keycode corresponding to the report
+//--------------------------------------------------------------------+
 uint16_t ConsumerKeyboard_Host::process_consumer_report(uint8_t const key_report[], uint16_t const report_len)
 {
   if (!this->is_valid)
@@ -556,73 +612,3 @@ uint16_t ConsumerKeyboard_Host::process_consumer_report(uint8_t const key_report
     return 0;
   }
 }
-
-//--------------------------------------------------------------------+
-// global variables for consumer page parsing and init
-//--------------------------------------------------------------------+
-
-// // list of consumer keys to listen for
-// static uint16_t* target_consumer_keys = nullptr;
-// // bitmap of positions of consumer keys in report data of attached keyboard
-// // index starting from 0, -1 if key not found in report
-// static int* key_bitmap_positions = nullptr;
-// // len(target_consumer_keys)
-// static int CONSUMER_KEYCODES_COUNT;
-
-// static uint8_t tuh_consumer_report_size;
-// static uint8_t tuh_consumer_instance;
-// static uint8_t tuh_consumer_report_id;
-
-//--------------------------------------------------------------------+
-// public facing
-// tuh_init_consumer_settings
-// sets all starting values
-// global variables updated:
-//   key_bitmap_positions,
-//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
-//--------------------------------------------------------------------+
-
-//--------------------------------------------------------------------+
-// public facing
-// tuh_init_consumer_settings
-// sets all starting values and sets target_consumer_keys list
-// vars:
-//   target_keys_list: input, list of consumer keycodes to listen for
-//   target_keys_count: input, length of target_keys_list
-// global variables updated:
-//   target_consumer_keys, key_bitmap_positions, CONSUMER_KEYCODES_COUNT,
-//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
-//--------------------------------------------------------------------+
-
-//--------------------------------------------------------------------+
-// public facing
-// tuh_compute_consumer_page_values
-// parses desc_report and initializes all settings related to consumer page
-//   vars:
-//   desc_report: input, the report descriptor to parse
-//   consumer_page_start: input, the starting index of consumer page in desc_report
-//   consumer_page_end: input, the ending index of consumer page in desc_report
-//   instance: input, the instance number of the consumer control interface
-//   report_id: input, the report id of the consumer control report
-// return:
-//   true if consumer page found and output values are set, false if consumer page not found in this instance
-// global variables set:
-//   key_bitmap_positions,
-//   tuh_consumer_report_size, tuh_consumer_instance, tuh_consumer_report_id
-//--------------------------------------------------------------------+
-
-//--------------------------------------------------------------------+
-// public facing
-// tuh_hid_process_consumer_report
-// processes a consumer report and return the corresponding uint16_t keycode
-// vars:
-//   report: input, the consumer report received from attached keyboard
-//   report_len: input, length of report
-// return:
-//   the keycode corresponding to the report
-//--------------------------------------------------------------------+
-
-//--------------------------------------------------------------------+
-// convert_bitmap_report_to_keycode
-// converts a bitmap report to a 16-bit single keycode indicating which key is pressed/released
-//--------------------------------------------------------------------+
