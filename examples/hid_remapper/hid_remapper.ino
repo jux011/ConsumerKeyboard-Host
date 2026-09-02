@@ -79,7 +79,9 @@ void setup() {
 #if defined(PRINT_SERIAL_DELAY) && PRINT_SERIAL_DELAY
   // wait for native usb
   for (int i = 0; i < PRINT_SERIAL_DELAY; i += 10) {
-    if (Serial) { break; }
+    if (Serial) {
+      break;
+    }
     delay(10);
   }
 #endif
@@ -98,7 +100,9 @@ void setup() {
 #if defined(PRINT_SERIAL_DELAY) && PRINT_SERIAL_DELAY
   // wait for native usb again
   for (int i = 0; i < PRINT_SERIAL_DELAY; i += 10) {
-    if (Serial) { break; }
+    if (Serial) {
+      break;
+    }
     delay(10);
   }
 #endif
@@ -115,7 +119,9 @@ void setup1() {
 #if defined(PRINT_SERIAL_DELAY) && PRINT_SERIAL_DELAY
   // wait for native usb
   for (int i = 0; i < PRINT_SERIAL_DELAY; i += 10) {
-    if (Serial) { break; }
+    if (Serial) {
+      break;
+    }
     delay(10);
   }
 #endif
@@ -142,7 +148,7 @@ extern "C" {
   // tuh_hid_parse_report_descriptor() can be used to parse common/simple enough
   // descriptor. Note: if report descriptor length > CFG_TUH_ENUMERATION_BUFSIZE,
   // it will be skipped therefore report_desc = NULL, desc_len = 0
-  void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
+  void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_report, uint16_t desc_len) {
     (void)desc_report;
     (void)desc_len;
     uint16_t vid, pid;
@@ -180,7 +186,7 @@ extern "C" {
     }
   }
 
-  void remap_key(uint8_t* const remapped_id, hid_keyboard_report_t* remapped_report, const hid_keyboard_report_t* original_report) {
+  void remap_key(uint8_t *const remapped_id, hid_keyboard_report_t *remapped_report, const hid_keyboard_report_t *original_report) {
     *remapped_id = RID_KEYBOARD;
     memcpy(remapped_report, original_report, sizeof(hid_keyboard_report_t));
 
@@ -194,19 +200,19 @@ extern "C" {
     }
   }
 
-  void remap_consumer_key(uint8_t* const remapped_id, uint16_t* remapped_report, const uint16_t original_report) {
+  void remap_consumer_key(uint8_t *const remapped_id, uint16_t *remapped_report, const uint16_t original_report) {
     // do nothing
     *remapped_id = RID_CONSUMER_CONTROL;
     *remapped_report = original_report;
   }
 
   // Invoked when received report from device via interrupt endpoint
-  void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
+  void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *report, uint16_t len) {
     if (instance == 0) {  // boot keyboard
-                          // Serial.printf("Received report from instance %d, len = %u\r\n", instance, len);
+      // Serial.printf("Received report from instance %d, len = %u\r\n", instance, len);
       hid_keyboard_report_t report_to_send;
       uint8_t target_id;
-      remap_key(&target_id, &report_to_send, (const hid_keyboard_report_t*)report);
+      remap_key(&target_id, &report_to_send, (const hid_keyboard_report_t *)report);
 
       // send remapped report to PC
       // NOTE: for better performance you should save/queue remapped report instead of

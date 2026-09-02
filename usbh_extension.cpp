@@ -343,15 +343,15 @@ void tuh_hid_compute_key_bitmap_positions(int computed_bitmap[], uint16_t const 
 //--------------------------------------------------------------------+
 uint16_t tuh_hid_process_consumer_report_16bit(uint8_t const key_report[], uint16_t const report_len)
 {
-    if (report_len < sizeof(uint16_t))
-    {
-      Serial.printf("Error: report length %u is too small for 16-bit consumer report\r\n", report_len);
-      return 0;
-    }
-    uint16_t data = 0;
-    // example: 0x96, 0x01 -> data = 0x0196 (little endian)
-    memcpy(&data, key_report, sizeof(uint16_t));
-    return data;
+  if (report_len < sizeof(uint16_t))
+  {
+    Serial.printf("Error: report length %u is too small for 16-bit consumer report\r\n", report_len);
+    return 0;
+  }
+  uint16_t data = 0;
+  // example: 0x96, 0x01 -> data = 0x0196 (little endian)
+  memcpy(&data, key_report, sizeof(uint16_t));
+  return data;
 }
 
 //--------------------------------------------------------------------+
