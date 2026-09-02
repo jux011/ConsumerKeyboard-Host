@@ -11,21 +11,27 @@ bool tuh_hid_get_consumer_page(tuh_hid_report_info_t info[],
                                uint8_t const desc_report[],
                                uint16_t desc_len);
 
-// Process a consumer report and return the corresponding keycode
-uint16_t tuh_process_consumer_report(uint8_t const report[], uint16_t report_len);
-
 // Get the report size (in bits) for consumer keys from report descriptor
-uint8_t get_consumer_report_size(uint8_t const desc_report[],
-                                 uint16_t fragment_start,
-                                 uint16_t fragment_end);
+uint8_t tuh_hid_get_consumer_report_size(uint8_t const desc_report[],
+                                         uint16_t const fragment_start,
+                                         uint16_t const fragment_end);
 
 // Compute bitmap of consumer key positions in report data
-void compute_consumer_report_bitmap(int computed_bitmap[],
-                                    uint16_t const target_keys[],
-                                    const int bitmap_len,
-                                    uint8_t const desc_report[],
-                                    uint16_t fragment_start,
-                                    uint16_t fragment_end);
+void tuh_hid_compute_key_bitmap_positions(int computed_bitmap[],
+                                          uint16_t const target_keys[],
+                                          int const bitmap_len,
+                                          uint8_t const desc_report[],
+                                          uint16_t const fragment_start,
+                                          uint16_t const fragment_end);
+
+// Process a consumer report and return the corresponding keycode
+uint16_t tuh_hid_process_consumer_report_16bit(uint8_t const report[], uint16_t const report_len);
+
+// Process a 1 bit consumer report
+uint16_t tuh_hid_process_consumer_report_1bit(uint8_t const report[], uint16_t const report_len,
+                                              int const computed_bitmap[],
+                                              uint16_t const target_keys[],
+                                              int const bitmap_len);
 
 //--------------------------------------------------------------------+
 // ConsumerKeyboard_Host class
@@ -39,13 +45,13 @@ public:
     ConsumerKeyboard_Host() = delete;
 
     // Constructor with target keys list
-    ConsumerKeyboard_Host(const uint16_t target_keys_list[], const int target_keys_count);
+    ConsumerKeyboard_Host(uint16_t const target_keys_list[], int const target_keys_count);
 
     // Destructor - cleanup allocated arrays
     ~ConsumerKeyboard_Host();
 
     // Compute and cache consumer key positions from descriptor
-    int compute_consumer_keys_map(uint8_t const desc_report[], uint16_t desc_len, uint8_t instance);
+    int process_desc_report(uint8_t const desc_report[], uint16_t const desc_len, uint8_t const instance);
 
     // Cleanup and reset state
     void reset();
@@ -57,15 +63,14 @@ public:
     }
 
     // Process a consumer report and return the corresponding keycode
-    uint16_t process_consumer_report(uint8_t const key_report[], uint16_t report_len);
+    uint16_t process_consumer_report(uint8_t const key_report[], uint16_t const report_len);
 
     bool is_valid = false;
 
-private:
     // list of consumer keys to listen for
     uint16_t *target_consumer_keys = nullptr;
 
-    // count of target consumer keys
+    // count of target consumer keys to listen for
     int consumer_keycodes_count = 0;
 
     // bitmap of positions of consumer keys in report data of attached keyboard

@@ -160,7 +160,7 @@ extern "C" {
       return;
     }
 
-    int status = consumer_keyboard_parser.compute_consumer_keys_map(desc_report, desc_len, instance);
+    int status = consumer_keyboard_parser.process_desc_report(desc_report, desc_len, instance);
     if (status != 0) {
       // Serial.printf("this instance is not a keyboard protocol");
       return;
