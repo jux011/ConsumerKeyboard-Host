@@ -490,16 +490,14 @@ int ConsumerKeyboard_Host::process_desc_report(uint8_t const desc_report[], uint
     return 1;
   }
 
-  this->tuh_consumer_instance = instance;
-  this->tuh_consumer_report_id = info.report_id;
-  this->tuh_consumer_report_size = tuh_hid_get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
+  uint8_t candidate_consumer_report_size = tuh_hid_get_consumer_report_size(desc_report, consumer_page_start, consumer_page_end);
 
-  if (this->tuh_consumer_report_size == 0)
+  if (candidate_consumer_report_size == 0)
   {
     Serial.printf("Error: consumer report size is 0, probably something wrong !!\r\n");
     return 2;
   }
-  else if (this->tuh_consumer_report_size == 1)
+  else if (candidate_consumer_report_size == 1)
   {
     Serial.printf("Consumer key 1bit bitmap\r\n");
     tuh_hid_compute_key_bitmap_positions(
@@ -515,16 +513,21 @@ int ConsumerKeyboard_Host::process_desc_report(uint8_t const desc_report[], uint
     //   Serial.printf("  usage = 0x%04x, bitpos = %d\r\n", this->target_consumer_keys[i], this->key_bitmap_positions[i]);
     // }
   }
-  else if (this->tuh_consumer_report_size == 16)
+  else if (candidate_consumer_report_size == 16)
   {
     Serial.printf("Consumer key 16bit datafield\r\n");
   }
   else
   {
     // error
-    Serial.printf("Error: consumer report size = %u not computed\r\n", this->tuh_consumer_report_size);
+    Serial.printf("Error: consumer report size = %u not computed\r\n", candidate_consumer_report_size);
     return 3;
   }
+
+  // processing successful, set class variables
+  this->tuh_consumer_instance = instance;
+  this->tuh_consumer_report_id = info.report_id;
+  this->tuh_consumer_report_size = candidate_consumer_report_size;
   this->is_valid = true;
   return 0;
 }
