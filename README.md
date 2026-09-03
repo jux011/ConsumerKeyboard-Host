@@ -39,3 +39,14 @@ Keychron K10PRO
 ###### Test setup:
 
 ![](./pics/IMG_20260601_150054728.jpg)
+
+###### Software setup:
+
+1. Download zipfile from GitHub
+   GitHub -> Code ▾ -> Download ZIP
+
+2. Import as Arduino IDE Library
+   Arduino IDE -> Sketch -> Include Library -> Add .ZIP Library... -> Select ZIP file
+
+3. Open hid_remapper example
+   Arduino IDE -> File -> Examples -> ConsumerKeyboard_Host -> hid_remapper.ino
