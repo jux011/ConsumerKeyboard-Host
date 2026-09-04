@@ -157,6 +157,10 @@ public:
     //--------------------------------------------------------------------+
     uint8_t get_tuh_consumer_instance()
     {
+        if (!this->is_valid)
+        {
+            Serial.printf("Error: called to give consumer instance number before descriptor is parsed\r\n");
+        }
         return this->tuh_consumer_instance;
     }
 
